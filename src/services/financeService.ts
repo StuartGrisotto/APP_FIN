@@ -1,7 +1,13 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as FileSystem from 'expo-file-system/legacy';
+import {
+  buildCategoryOptions,
+  normalizeCounterpartyName,
+  slugifyCategoryLabel,
+} from '../constants/categories';
 import { buildMockDashboard } from '../mocks/financeData';
 import {
+  CategoryOption,
   CreateTransactionPayload,
   DashboardData,
   PeriodFilter,
@@ -18,8 +24,13 @@ const wait = (ms: number): Promise<void> =>
 
 const STORAGE_KEY = 'app_fin_transactions_realonly_v1';
 const STORAGE_FILE = `${FileSystem.documentDirectory ?? ''}app_fin_transactions_realonly_v1.json`;
+const PLUGGY_LAST_SYNC_KEY = 'app_fin_pluggy_last_sync_at_v1';
+const CATEGORY_RULES_KEY = 'app_fin_category_rules_v1';
+const CATEGORY_LABELS_KEY = 'app_fin_custom_category_labels_v1';
 
 let transactionsDb: Transaction[] = [];
+let categoryRulesDb: Record<string, string> = {};
+let customCategoryLabelsDb: Record<string, string> = {};
 let hydrated = false;
 
 const readFromFileBackup = async (): Promise<Transaction[] | null> => {
@@ -68,21 +79,17 @@ const hydrateTransactions = async () => {
     if (raw) {
       const parsed = JSON.parse(raw) as Transaction[];
       transactionsDb = Array.isArray(parsed) ? parsed : [];
-      hydrated = true;
-      return;
+    } else {
+      const fileBackup = await readFromFileBackup();
+      if (fileBackup) {
+        transactionsDb = fileBackup;
+        await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(fileBackup));
+      } else {
+        transactionsDb = [];
+        await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(transactionsDb));
+        await writeToFileBackup(transactionsDb);
+      }
     }
-
-    const fileBackup = await readFromFileBackup();
-    if (fileBackup) {
-      transactionsDb = fileBackup;
-      await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(fileBackup));
-      hydrated = true;
-      return;
-    }
-
-    transactionsDb = [];
-    await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(transactionsDb));
-    await writeToFileBackup(transactionsDb);
   } catch {
     const fileBackup = await readFromFileBackup();
     if (fileBackup) {
@@ -93,6 +100,30 @@ const hydrateTransactions = async () => {
   }
 
   hydrated = true;
+
+  try {
+    const rawRules = await AsyncStorage.getItem(CATEGORY_RULES_KEY);
+    if (rawRules) {
+      const parsed = JSON.parse(rawRules) as Record<string, string>;
+      categoryRulesDb = parsed && typeof parsed === 'object' ? parsed : {};
+    } else {
+      categoryRulesDb = {};
+    }
+  } catch {
+    categoryRulesDb = {};
+  }
+
+  try {
+    const rawLabels = await AsyncStorage.getItem(CATEGORY_LABELS_KEY);
+    if (rawLabels) {
+      const parsed = JSON.parse(rawLabels) as Record<string, string>;
+      customCategoryLabelsDb = parsed && typeof parsed === 'object' ? parsed : {};
+    } else {
+      customCategoryLabelsDb = {};
+    }
+  } catch {
+    customCategoryLabelsDb = {};
+  }
 };
 
 const persistTransactions = async () => {
@@ -121,12 +152,7 @@ const persistTransactions = async () => {
 };
 
 const normalizeText = (value: string) =>
-  value
-    .toLowerCase()
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .replace(/\s+/g, ' ')
-    .trim();
+  normalizeCounterpartyName(value);
 
 const buildFallbackKey = (date: string, amount: number, description: string) =>
   `${date}|${amount.toFixed(2)}|${normalizeText(description)}`;
@@ -170,7 +196,105 @@ const toDateIso = (raw: string): string => {
   return new Date().toISOString();
 };
 
+const resolveCategoryByRule = (title: string, fallback: string): string => {
+  const key = normalizeCounterpartyName(title);
+  return categoryRulesDb[key] ?? fallback;
+};
+
+const persistCategoryRules = async () => {
+  try {
+    await AsyncStorage.setItem(CATEGORY_RULES_KEY, JSON.stringify(categoryRulesDb));
+  } catch {
+    // sem erro fatal
+  }
+};
+
+const persistCustomCategoryLabels = async () => {
+  try {
+    await AsyncStorage.setItem(CATEGORY_LABELS_KEY, JSON.stringify(customCategoryLabelsDb));
+  } catch {
+    // sem erro fatal
+  }
+};
+
 export const financeService = {
+  async getCategoryOptions(): Promise<CategoryOption[]> {
+    await hydrateTransactions();
+    return buildCategoryOptions(customCategoryLabelsDb);
+  },
+
+  async getCategoryLabelMap(): Promise<Record<string, string>> {
+    await hydrateTransactions();
+    return { ...customCategoryLabelsDb };
+  },
+
+  async updateTransactionCategory(
+    transactionId: string,
+    categoryId: string,
+    categoryLabel?: string,
+  ): Promise<{ updatedCount: number; counterparty: string; categoryId: string }> {
+    await hydrateTransactions();
+
+    const selected = transactionsDb.find((item) => item.id === transactionId);
+    if (!selected) {
+      throw new Error('Movimentacao nao encontrada para categorizar.');
+    }
+
+    const normalizedCounterparty = normalizeCounterpartyName(selected.title);
+    if (!normalizedCounterparty) {
+      throw new Error('Nao foi possivel identificar o nome para criar regra.');
+    }
+
+    let finalCategoryId = categoryId;
+    if (categoryId === '__new__') {
+      const label = String(categoryLabel || '').trim();
+      if (!label) {
+        throw new Error('Informe o nome da nova categoria.');
+      }
+      const slug = slugifyCategoryLabel(label);
+      if (!slug) {
+        throw new Error('Nome da categoria invalido.');
+      }
+      finalCategoryId = `custom_${slug}`;
+      customCategoryLabelsDb[finalCategoryId] = label;
+      await persistCustomCategoryLabels();
+    } else if (categoryLabel && finalCategoryId.startsWith('custom_')) {
+      customCategoryLabelsDb[finalCategoryId] = categoryLabel.trim();
+      await persistCustomCategoryLabels();
+    }
+
+    categoryRulesDb[normalizedCounterparty] = finalCategoryId;
+    await persistCategoryRules();
+
+    let updatedCount = 0;
+    transactionsDb = transactionsDb.map((item) => {
+      if (normalizeCounterpartyName(item.title) !== normalizedCounterparty) {
+        return item;
+      }
+      updatedCount += 1;
+      return {
+        ...item,
+        category: finalCategoryId,
+      };
+    });
+
+    await persistTransactions();
+
+    return {
+      updatedCount,
+      counterparty: selected.title,
+      categoryId: finalCategoryId,
+    };
+  },
+
+  async getLastPluggySyncAt(): Promise<string | null> {
+    try {
+      return await AsyncStorage.getItem(PLUGGY_LAST_SYNC_KEY);
+    } catch {
+      return null;
+    }
+  },
+
   async getDashboard(period: PeriodFilter): Promise<DashboardData> {
     await hydrateTransactions();
     await wait(180);
@@ -189,6 +313,7 @@ export const financeService = {
     const transaction: Transaction = {
       id: `t_${Math.random().toString(36).slice(2, 10)}`,
       ...payload,
+      category: resolveCategoryByRule(payload.title, payload.category),
       amount: Number(payload.amount),
     };
 
@@ -206,9 +331,16 @@ export const financeService = {
     await wait(250);
 
     const { parsed, invalidCount, totalRead } = parseNubankCsv(csvContent);
+    const parsedWithRules = parsed.map((item) => ({
+      ...item,
+      transaction: {
+        ...item.transaction,
+        category: resolveCategoryByRule(item.transaction.title, item.transaction.category),
+      },
+    }));
     const { nextTransactions, result } = mergeParsedTransactions(
       transactionsDb,
-      parsed,
+      parsedWithRules,
       invalidCount,
       totalRead,
     );
@@ -259,7 +391,7 @@ export const financeService = {
       const transaction: Transaction = {
         id: `pluggy_${id}`,
         title: description,
-        category: pickCategory(description),
+        category: resolveCategoryByRule(description, pickCategory(description)),
         type: isIncome ? 'income' : 'expense',
         amount,
         date: dateIso,
@@ -285,6 +417,13 @@ export const financeService = {
       (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime(),
     );
     await persistTransactions();
+    const syncedAt = new Date().toISOString();
+
+    try {
+      await AsyncStorage.setItem(PLUGGY_LAST_SYNC_KEY, syncedAt);
+    } catch {
+      // Falha de persistencia da data nao deve quebrar importacao
+    }
 
     return {
       itemId: payload.itemId,
@@ -294,6 +433,7 @@ export const financeService = {
       duplicateCount,
       invalidCount,
       totalRead: payload.transactions.length,
+      syncedAt,
     };
   },
 };

@@ -10,6 +10,7 @@ import {
 } from 'react';
 import { financeService } from '../services/financeService';
 import {
+  CategoryOption,
   CreateTransactionPayload,
   DashboardData,
   PeriodFilter,
@@ -20,6 +21,9 @@ import {
 interface FinanceContextValue {
   dashboard: DashboardData | null;
   period: PeriodFilter;
+  lastPluggySyncAt: string | null;
+  categoryOptions: CategoryOption[];
+  categoryLabelMap: Record<string, string>;
   loadingDashboard: boolean;
   importingStatement: boolean;
   importingPluggy: boolean;
@@ -31,6 +35,11 @@ interface FinanceContextValue {
   addTransaction: (payload: CreateTransactionPayload) => Promise<void>;
   importStatementCsv: (csvContent: string) => Promise<StatementImportResult>;
   importPluggyItem: (itemId: string) => Promise<PluggyImportResult>;
+  updateTransactionCategory: (
+    transactionId: string,
+    categoryId: string,
+    categoryLabel?: string,
+  ) => Promise<void>;
   clearStatementFeedback: () => void;
   clearPluggyFeedback: () => void;
 }
@@ -40,6 +49,9 @@ const FinanceContext = createContext<FinanceContextValue | undefined>(undefined)
 export const FinanceProvider = ({ children }: PropsWithChildren) => {
   const [dashboard, setDashboard] = useState<DashboardData | null>(null);
   const [period, setPeriodState] = useState<PeriodFilter>('month');
+  const [lastPluggySyncAt, setLastPluggySyncAt] = useState<string | null>(null);
+  const [categoryOptions, setCategoryOptions] = useState<CategoryOption[]>([]);
+  const [categoryLabelMap, setCategoryLabelMap] = useState<Record<string, string>>({});
   const [loadingDashboard, setLoadingDashboard] = useState(true);
   const [importingStatement, setImportingStatement] = useState(false);
   const [importingPluggy, setImportingPluggy] = useState(false);
@@ -74,6 +86,18 @@ export const FinanceProvider = ({ children }: PropsWithChildren) => {
         firstLoadRef.current = false;
       });
   }, [period, loadDashboard]);
+
+  useEffect(() => {
+    financeService.getLastPluggySyncAt().then((value) => {
+      setLastPluggySyncAt(value);
+    });
+    financeService.getCategoryOptions().then((value) => {
+      setCategoryOptions(value);
+    });
+    financeService.getCategoryLabelMap().then((value) => {
+      setCategoryLabelMap(value);
+    });
+  }, []);
 
   const setPeriod = (next: PeriodFilter) => {
     if (next === period) {
@@ -127,6 +151,7 @@ export const FinanceProvider = ({ children }: PropsWithChildren) => {
     try {
       const result = await financeService.importPluggyItem(itemId);
       await refreshDashboard();
+      setLastPluggySyncAt(result.syncedAt);
 
       const summary = `Pluggy sincronizado: ${result.importedCount} novas, ${result.duplicateCount} duplicadas, ${result.invalidCount} invalidas. Contas: ${result.accountCount}.`;
       setPluggyImportFeedback(summary);
@@ -143,6 +168,19 @@ export const FinanceProvider = ({ children }: PropsWithChildren) => {
     }
   };
 
+  const updateTransactionCategory = async (
+    transactionId: string,
+    categoryId: string,
+    categoryLabel?: string,
+  ) => {
+    await financeService.updateTransactionCategory(transactionId, categoryId, categoryLabel);
+    await refreshDashboard();
+    const nextOptions = await financeService.getCategoryOptions();
+    const nextLabels = await financeService.getCategoryLabelMap();
+    setCategoryOptions(nextOptions);
+    setCategoryLabelMap(nextLabels);
+  };
+
   const clearPluggyFeedback = () => {
     setPluggyImportFeedback(null);
   };
@@ -151,6 +189,9 @@ export const FinanceProvider = ({ children }: PropsWithChildren) => {
     () => ({
       dashboard,
       period,
+      lastPluggySyncAt,
+      categoryOptions,
+      categoryLabelMap,
       loadingDashboard,
       importingStatement,
       importingPluggy,
@@ -162,12 +203,16 @@ export const FinanceProvider = ({ children }: PropsWithChildren) => {
       addTransaction,
       importStatementCsv,
       importPluggyItem,
+      updateTransactionCategory,
       clearStatementFeedback,
       clearPluggyFeedback,
     }),
     [
       addingTransaction,
+      categoryLabelMap,
+      categoryOptions,
       dashboard,
+      lastPluggySyncAt,
       loadingDashboard,
       importingPluggy,
       importingStatement,

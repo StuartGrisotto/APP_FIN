@@ -1,30 +1,24 @@
-﻿import { StyleSheet, Text, View } from 'react-native';
+﻿import { Pressable, StyleSheet, Text, View } from 'react-native';
 import Svg, { Circle, G, Path } from 'react-native-svg';
+import { getCategoryColor, getCategoryLabel } from '../constants/categories';
 import { useAppTheme } from '../context/ThemeContext';
-import { Transaction, TransactionCategory } from '../types/finance';
+import { Transaction } from '../types/finance';
 import { radii, spacing } from '../theme/tokens';
-import { categoryLabel, formatCurrency } from '../utils/formatters';
+import { formatCurrency } from '../utils/formatters';
 
 interface ExpenseDonutCardProps {
   transactions: Transaction[];
+  categoryLabelMap?: Record<string, string>;
+  selectedCategory?: string | null;
+  onSelectCategory?: (category: string | null) => void;
 }
 
 interface CategorySlice {
-  category: TransactionCategory;
+  category: string;
   value: number;
   percentage: number;
   color: string;
 }
-
-const categoryColors: Record<TransactionCategory, string> = {
-  food: '#FB923C',
-  transport: '#60A5FA',
-  housing: '#C084FC',
-  health: '#FB7185',
-  leisure: '#22D3EE',
-  salary: '#2DD4BF',
-  others: '#71717A',
-};
 
 const polarToCartesian = (cx: number, cy: number, radius: number, angle: number) => {
   const radians = ((angle - 90) * Math.PI) / 180;
@@ -58,24 +52,29 @@ const arcPath = (
   ].join(' ');
 };
 
-export const ExpenseDonutCard = ({ transactions }: ExpenseDonutCardProps) => {
+export const ExpenseDonutCard = ({
+  transactions,
+  categoryLabelMap,
+  selectedCategory,
+  onSelectCategory,
+}: ExpenseDonutCardProps) => {
   const { colors } = useAppTheme();
   const styles = createStyles(colors);
 
   const expenseTransactions = transactions.filter((item) => item.type === 'expense');
   const total = expenseTransactions.reduce((acc, item) => acc + item.amount, 0);
 
-  const grouped = expenseTransactions.reduce<Record<TransactionCategory, number>>((acc, item) => {
+  const grouped = expenseTransactions.reduce<Record<string, number>>((acc, item) => {
     acc[item.category] = (acc[item.category] ?? 0) + item.amount;
     return acc;
-  }, {} as Record<TransactionCategory, number>);
+  }, {});
 
   const slices: CategorySlice[] = Object.entries(grouped)
     .map(([category, value]) => ({
-      category: category as TransactionCategory,
+      category,
       value,
       percentage: total > 0 ? (value / total) * 100 : 0,
-      color: categoryColors[category as TransactionCategory],
+      color: getCategoryColor(category),
     }))
     .sort((a, b) => b.value - a.value);
 
@@ -107,11 +106,18 @@ export const ExpenseDonutCard = ({ transactions }: ExpenseDonutCardProps) => {
                 return null;
               }
 
+              const active = selectedCategory === slice.category;
+              const dimmed = Boolean(selectedCategory && !active);
+
               return (
                 <G key={slice.category}>
                   <Path
                     d={arcPath(cx, cy, outerRadius, innerRadius, startAngle, endAngle)}
                     fill={slice.color}
+                    opacity={dimmed ? 0.3 : 1}
+                    stroke={active ? colors.textPrimary : 'transparent'}
+                    strokeWidth={active ? 1.8 : 0}
+                    onPress={() => onSelectCategory?.(active ? null : slice.category)}
                   />
                 </G>
               );
@@ -125,15 +131,25 @@ export const ExpenseDonutCard = ({ transactions }: ExpenseDonutCardProps) => {
         </View>
 
         <View style={styles.legendCol}>
-          {visibleSlices.map((slice) => (
-            <View style={styles.legendRow} key={slice.category}>
-              <View style={[styles.dot, { backgroundColor: slice.color }]} />
-              <Text style={styles.legendName}>{categoryLabel[slice.category]}</Text>
-              <Text style={styles.legendValue}>{Math.round(slice.percentage)}%</Text>
-            </View>
-          ))}
+          {visibleSlices.map((slice) => {
+            const active = selectedCategory === slice.category;
+            return (
+              <Pressable
+                style={[styles.legendRow, active && styles.legendRowActive]}
+                key={slice.category}
+                onPress={() => onSelectCategory?.(active ? null : slice.category)}
+              >
+                <View style={[styles.dot, { backgroundColor: slice.color }]} />
+                <Text style={styles.legendName}>{getCategoryLabel(slice.category, categoryLabelMap)}</Text>
+                <Text style={styles.legendValue}>{Math.round(slice.percentage)}%</Text>
+              </Pressable>
+            );
+          })}
 
           {hiddenCount > 0 ? <Text style={styles.moreText}>+{hiddenCount} outras</Text> : null}
+          {selectedCategory ? (
+            <Text style={styles.filterHint}>Filtro ativo na lista de transacoes</Text>
+          ) : null}
         </View>
       </View>
     </View>
@@ -173,10 +189,6 @@ const createStyles = (colors: any) =>
       justifyContent: 'center',
       maxWidth: 80,
     },
-    centerLabel: {
-      color: colors.textMuted,
-      fontSize: 12,
-    },
     centerValue: {
       color: colors.textPrimary,
       fontSize: 12,
@@ -191,6 +203,12 @@ const createStyles = (colors: any) =>
       flexDirection: 'row',
       alignItems: 'center',
       gap: spacing.sm,
+      borderRadius: radii.md,
+      paddingHorizontal: spacing.xs,
+      paddingVertical: 4,
+    },
+    legendRowActive: {
+      backgroundColor: colors.primarySoft,
     },
     dot: {
       width: 8,
@@ -211,5 +229,11 @@ const createStyles = (colors: any) =>
       marginTop: spacing.xs,
       color: colors.textMuted,
       fontSize: 13,
+    },
+    filterHint: {
+      marginTop: spacing.xs,
+      color: colors.primary,
+      fontSize: 12,
+      fontWeight: '700',
     },
   });

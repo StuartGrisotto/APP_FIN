@@ -14,7 +14,6 @@ export const BalanceCard = ({ summary }: BalanceCardProps) => {
   const { colors } = useAppTheme();
   const styles = createStyles(colors);
   const [hidden, setHidden] = useState(false);
-  const miniIconColor = 'rgba(255, 255, 255, 0.86)';
 
   return (
     <View style={styles.card}>
@@ -34,8 +33,8 @@ export const BalanceCard = ({ summary }: BalanceCardProps) => {
       <View style={styles.row}>
         <View style={[styles.miniCard, styles.incomeBackground]}>
           <View style={styles.miniContent}>
-            <View style={styles.miniIconWrap}>
-              <MaterialCommunityIcons name="trending-up" size={14} color={miniIconColor} />
+            <View style={[styles.miniIconWrap, styles.incomeIconWrap]}>
+              <MaterialCommunityIcons name="trending-up" size={14} color={colors.success} />
             </View>
             <View>
               <Text style={styles.miniLabel}>Receitas</Text>
@@ -48,8 +47,8 @@ export const BalanceCard = ({ summary }: BalanceCardProps) => {
 
         <View style={[styles.miniCard, styles.expenseBackground]}>
           <View style={styles.miniContent}>
-            <View style={styles.miniIconWrap}>
-              <MaterialCommunityIcons name="trending-down" size={14} color={miniIconColor} />
+            <View style={[styles.miniIconWrap, styles.expenseIconWrap]}>
+              <MaterialCommunityIcons name="trending-down" size={14} color={colors.destructive} />
             </View>
             <View>
               <Text style={styles.miniLabel}>Despesas</Text>
@@ -116,9 +115,15 @@ const createStyles = (colors: any) =>
       width: 22,
       height: 22,
       borderRadius: radii.pill,
-      backgroundColor: 'rgba(255, 255, 255, 0.16)',
+      backgroundColor: 'rgba(255, 255, 255, 0.22)',
       alignItems: 'center',
       justifyContent: 'center',
+    },
+    incomeIconWrap: {
+      backgroundColor: colors.successSoft,
+    },
+    expenseIconWrap: {
+      backgroundColor: colors.destructiveSoft,
     },
     incomeBackground: {
       backgroundColor: 'rgba(255, 255, 255, 0.18)',

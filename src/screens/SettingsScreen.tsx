@@ -11,6 +11,7 @@ import { useAppTheme } from '../context/ThemeContext';
 import { pluggyService } from '../services/pluggyService';
 import { ThemeMode } from '../theme/palettes';
 import { radii, spacing } from '../theme/tokens';
+import { formatDateTime } from '../utils/formatters';
 
 interface SettingsScreenProps {
   onBackToHome: () => void;
@@ -49,6 +50,7 @@ export const SettingsScreen = ({ onBackToHome }: SettingsScreenProps) => {
     dashboard,
     importingPluggy,
     pluggyImportFeedback,
+    lastPluggySyncAt,
     importPluggyItem,
     clearPluggyFeedback,
   } = useFinance();
@@ -158,6 +160,11 @@ export const SettingsScreen = ({ onBackToHome }: SettingsScreenProps) => {
 
         <Text style={styles.metaLine}>Backend: {backendBaseUrl}</Text>
         <Text style={styles.metaLine}>Total de movimentacoes no app: {dashboard?.transactions.length ?? 0}</Text>
+        {lastPluggySyncAt ? (
+          <Text style={styles.metaLine}>Ultima sincronizacao: {formatDateTime(lastPluggySyncAt)}</Text>
+        ) : (
+          <Text style={styles.metaLine}>Ultima sincronizacao: ainda nao realizada</Text>
+        )}
 
         <PrimaryButton
           label="Conectar MeuPluggy"

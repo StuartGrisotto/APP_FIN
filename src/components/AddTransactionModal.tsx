@@ -14,6 +14,7 @@ import {
   TransactionCategory,
   TransactionType,
 } from '../types/finance';
+import { DEFAULT_CATEGORY_OPTIONS } from '../constants/categories';
 import { radii, spacing } from '../theme/tokens';
 import { InputField } from './InputField';
 import { PrimaryButton } from './PrimaryButton';
@@ -25,15 +26,10 @@ interface AddTransactionModalProps {
   onSubmit: (payload: CreateTransactionPayload) => Promise<void>;
 }
 
-const categories: { label: string; value: TransactionCategory }[] = [
-  { label: 'Alimentacao', value: 'food' },
-  { label: 'Transporte', value: 'transport' },
-  { label: 'Moradia', value: 'housing' },
-  { label: 'Salario', value: 'salary' },
-  { label: 'Lazer', value: 'leisure' },
-  { label: 'Saude', value: 'health' },
-  { label: 'Outros', value: 'others' },
-];
+const categories: { label: string; value: TransactionCategory }[] = DEFAULT_CATEGORY_OPTIONS.map((item) => ({
+  label: item.label,
+  value: item.id,
+}));
 
 const types: { label: string; value: TransactionType }[] = [
   { label: 'Receita', value: 'income' },

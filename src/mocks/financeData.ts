@@ -23,6 +23,46 @@ const buildSummary = (transactions: Transaction[]): DashboardData['summary'] => 
   };
 };
 
+const filterTransactionsByPeriod = (
+  transactions: Transaction[],
+  period: PeriodFilter,
+  referenceDate: Date,
+): Transaction[] => {
+  if (transactions.length === 0) {
+    return transactions;
+  }
+
+  const periodStart = new Date(referenceDate);
+  periodStart.setHours(0, 0, 0, 0);
+
+  if (period === 'today') {
+    const nextDay = new Date(periodStart);
+    nextDay.setDate(nextDay.getDate() + 1);
+    return transactions.filter((item) => {
+      const date = new Date(item.date);
+      return date >= periodStart && date < nextDay;
+    });
+  }
+
+  if (period === '7d' || period === '30d') {
+    const days = period === '7d' ? 7 : 30;
+    periodStart.setDate(periodStart.getDate() - (days - 1));
+
+    return transactions.filter((item) => {
+      const date = new Date(item.date);
+      return date >= periodStart && date <= referenceDate;
+    });
+  }
+
+  return transactions.filter((item) => {
+    const date = new Date(item.date);
+    return (
+      date.getUTCFullYear() === referenceDate.getUTCFullYear() &&
+      date.getUTCMonth() === referenceDate.getUTCMonth()
+    );
+  });
+};
+
 const getReferenceDate = (transactions: Transaction[]): Date => {
   if (transactions.length === 0) {
     return new Date();
@@ -163,8 +203,19 @@ const buildChart = (transactions: Transaction[], period: PeriodFilter): ChartPoi
 export const buildMockDashboard = (
   transactions: Transaction[],
   period: PeriodFilter,
-): DashboardData => ({
-  summary: buildSummary(transactions),
-  transactions,
-  chart: buildChart(transactions, period),
-});
+): DashboardData => {
+  const referenceDate = getReferenceDate(transactions);
+  const transactionsInPeriod = filterTransactionsByPeriod(transactions, period, referenceDate);
+  const fullSummary = buildSummary(transactions);
+  const periodSummary = buildSummary(transactionsInPeriod);
+
+  return {
+    summary: {
+      ...periodSummary,
+      balance: fullSummary.balance,
+    },
+    transactions,
+    periodTransactions: transactionsInPeriod,
+    chart: buildChart(transactions, period),
+  };
+};

@@ -1,16 +1,20 @@
 ﻿import { Ionicons } from '@expo/vector-icons';
+import { useEffect, useMemo, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { BalanceCard } from '../components/BalanceCard';
+import { CategorizeTransactionModal } from '../components/CategorizeTransactionModal';
 import { EmptyState } from '../components/EmptyState';
 import { ExpenseDonutCard } from '../components/ExpenseDonutCard';
 import { FilterPills } from '../components/FilterPills';
 import { Screen } from '../components/Screen';
 import { SimpleBarChart } from '../components/SimpleBarChart';
 import { TransactionItem } from '../components/TransactionItem';
+import { getCategoryLabel } from '../constants/categories';
 import { useAuth } from '../context/AuthContext';
 import { useFinance } from '../context/FinanceContext';
 import { useAppTheme } from '../context/ThemeContext';
 import { radii, spacing } from '../theme/tokens';
+import { Transaction } from '../types/finance';
 
 interface DashboardScreenProps {
   onOpenSettings: () => void;
@@ -19,9 +23,38 @@ interface DashboardScreenProps {
 export const DashboardScreen = ({ onOpenSettings }: DashboardScreenProps) => {
   const { colors } = useAppTheme();
   const styles = createStyles(colors);
+  const [selectedTransaction, setSelectedTransaction] = useState<Transaction | null>(null);
+  const [savingCategory, setSavingCategory] = useState(false);
+  const [selectedExpenseCategory, setSelectedExpenseCategory] = useState<string | null>(null);
 
   const { user } = useAuth();
-  const { dashboard, period, setPeriod, loadingDashboard } = useFinance();
+  const {
+    dashboard,
+    period,
+    setPeriod,
+    loadingDashboard,
+    categoryOptions,
+    categoryLabelMap,
+    updateTransactionCategory,
+  } = useFinance();
+
+  useEffect(() => {
+    setSelectedExpenseCategory(null);
+  }, [period]);
+
+  const filteredLatestTransactions = useMemo(() => {
+    if (!dashboard) {
+      return [];
+    }
+
+    if (!selectedExpenseCategory) {
+      return dashboard.transactions.slice(0, 6);
+    }
+
+    return dashboard.periodTransactions
+      .filter((item) => item.type === 'expense' && item.category === selectedExpenseCategory)
+      .slice(0, 6);
+  }, [dashboard, selectedExpenseCategory]);
 
   if (loadingDashboard && !dashboard) {
     return (
@@ -68,17 +101,60 @@ export const DashboardScreen = ({ onOpenSettings }: DashboardScreenProps) => {
 
       <SimpleBarChart points={dashboard.chart} />
 
-      <ExpenseDonutCard transactions={dashboard.transactions} />
+      <ExpenseDonutCard
+        transactions={dashboard.periodTransactions}
+        categoryLabelMap={categoryLabelMap}
+        selectedCategory={selectedExpenseCategory}
+        onSelectCategory={setSelectedExpenseCategory}
+      />
 
       <View style={styles.transactionsHeader}>
         <Text style={styles.sectionTitle}>Ultimas transacoes</Text>
+        {selectedExpenseCategory ? (
+          <Text style={styles.filteredBy}>
+            Filtrando por: {getCategoryLabel(selectedExpenseCategory, categoryLabelMap)}
+          </Text>
+        ) : null}
       </View>
 
       <View style={styles.transactionList}>
-        {dashboard.transactions.slice(0, 6).map((item) => (
-          <TransactionItem key={item.id} item={item} />
-        ))}
+        {filteredLatestTransactions.length > 0 ? (
+          filteredLatestTransactions.map((item) => (
+            <TransactionItem
+              key={item.id}
+              item={item}
+              categoryLabelMap={categoryLabelMap}
+              onPress={(transaction) => setSelectedTransaction(transaction)}
+            />
+          ))
+        ) : (
+          <View style={styles.emptyFilteredWrap}>
+            <Text style={styles.emptyFilteredText}>
+              Nenhuma transacao para essa categoria no periodo selecionado.
+            </Text>
+          </View>
+        )}
       </View>
+
+      <CategorizeTransactionModal
+        visible={Boolean(selectedTransaction)}
+        transaction={selectedTransaction}
+        categories={categoryOptions}
+        loading={savingCategory}
+        onClose={() => setSelectedTransaction(null)}
+        onSave={async (categoryId, newCategoryLabel) => {
+          if (!selectedTransaction) {
+            return;
+          }
+          setSavingCategory(true);
+          try {
+            await updateTransactionCategory(selectedTransaction.id, categoryId, newCategoryLabel);
+            setSelectedTransaction(null);
+          } finally {
+            setSavingCategory(false);
+          }
+        }}
+      />
     </Screen>
   );
 };
@@ -113,6 +189,7 @@ const createStyles = (colors: any) =>
     },
     transactionsHeader: {
       marginTop: spacing.sm,
+      gap: 2,
     },
     sectionTitle: {
       color: colors.textPrimary,
@@ -120,11 +197,23 @@ const createStyles = (colors: any) =>
       fontWeight: '800',
       letterSpacing: -0.2,
     },
+    filteredBy: {
+      color: colors.primary,
+      fontSize: 12,
+      fontWeight: '700',
+    },
     transactionList: {
       borderRadius: radii.lg,
       borderWidth: 1,
       borderColor: colors.border,
       backgroundColor: colors.surface,
       paddingHorizontal: spacing.md,
+    },
+    emptyFilteredWrap: {
+      paddingVertical: spacing.lg,
+    },
+    emptyFilteredText: {
+      color: colors.textSecondary,
+      fontSize: 13,
     },
   });

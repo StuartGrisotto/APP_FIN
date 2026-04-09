@@ -1,13 +1,6 @@
 ﻿export type TransactionType = 'income' | 'expense';
 
-export type TransactionCategory =
-  | 'food'
-  | 'transport'
-  | 'housing'
-  | 'salary'
-  | 'leisure'
-  | 'health'
-  | 'others';
+export type TransactionCategory = string;
 
 export type PeriodFilter = 'today' | '7d' | '30d' | 'month';
 
@@ -42,6 +35,7 @@ export interface ChartPoint {
 export interface DashboardData {
   summary: Summary;
   transactions: Transaction[];
+  periodTransactions: Transaction[];
   chart: ChartPoint[];
 }
 
@@ -58,6 +52,12 @@ export interface CreateTransactionPayload {
   date: string;
 }
 
+export interface CategoryOption {
+  id: string;
+  label: string;
+  isCustom: boolean;
+}
+
 export interface StatementImportResult {
   importedCount: number;
   duplicateCount: number;
@@ -69,4 +69,5 @@ export interface PluggyImportResult extends StatementImportResult {
   itemId: string;
   accountCount: number;
   pulledTransactions: number;
+  syncedAt: string;
 }

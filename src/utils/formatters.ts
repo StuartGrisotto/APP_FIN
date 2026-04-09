@@ -1,4 +1,4 @@
-﻿import { TransactionCategory, TransactionType } from '../types/finance';
+﻿import { TransactionType } from '../types/finance';
 
 export const formatCurrency = (value: number): string => {
   return new Intl.NumberFormat('pt-BR', {
@@ -26,14 +26,15 @@ export const formatDate = (value: string): string => {
   }).format(date);
 };
 
-export const categoryLabel: Record<TransactionCategory, string> = {
-  food: 'Alimentacao',
-  transport: 'Transporte',
-  housing: 'Moradia',
-  salary: 'Salario',
-  leisure: 'Lazer',
-  health: 'Saude',
-  others: 'Outros',
+export const formatDateTime = (value: string): string => {
+  const date = new Date(value);
+  return new Intl.DateTimeFormat('pt-BR', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  }).format(date);
 };
 
 export const transactionTypeLabel: Record<TransactionType, string> = {

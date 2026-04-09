@@ -1,4 +1,5 @@
 ﻿import { StyleSheet, Text, View } from 'react-native';
+import Svg, { Defs, LinearGradient, Path, Stop } from 'react-native-svg';
 import { useAppTheme } from '../context/ThemeContext';
 import { ChartPoint } from '../types/finance';
 import { radii, spacing } from '../theme/tokens';
@@ -7,56 +8,89 @@ interface SimpleBarChartProps {
   points: ChartPoint[];
 }
 
+const buildPath = (points: { x: number; y: number }[]) => {
+  if (points.length === 0) {
+    return '';
+  }
+
+  return points
+    .map((point, index) => `${index === 0 ? 'M' : 'L'} ${point.x.toFixed(2)} ${point.y.toFixed(2)}`)
+    .join(' ');
+};
+
 export const SimpleBarChart = ({ points }: SimpleBarChartProps) => {
   const { colors } = useAppTheme();
   const styles = createStyles(colors);
 
-  const maxValue = Math.max(
-    1,
-    ...points.flatMap((point) => [point.income, point.expense]),
-  );
+  const deltas = points.map((point) => point.income - point.expense);
+  const evolution = deltas.reduce<number[]>((acc, delta) => {
+    const previous = acc.length > 0 ? acc[acc.length - 1] : 0;
+    acc.push(previous + delta);
+    return acc;
+  }, []);
+
+  const width = 320;
+  const height = 170;
+  const padX = 8;
+  const padTop = 12;
+  const padBottom = 22;
+  const innerHeight = height - padTop - padBottom;
+  const innerWidth = width - padX * 2;
+
+  const minValue = Math.min(0, ...evolution);
+  const maxValue = Math.max(0, ...evolution);
+  const range = Math.max(1, maxValue - minValue);
+
+  const chartPoints = evolution.map((value, index) => {
+    const x =
+      evolution.length <= 1
+        ? width / 2
+        : padX + (index / (evolution.length - 1)) * innerWidth;
+    const y = padTop + ((maxValue - value) / range) * innerHeight;
+    return { x, y };
+  });
+
+  const linePath = buildPath(chartPoints);
+  const areaPath =
+    chartPoints.length > 0
+      ? `${linePath} L ${chartPoints[chartPoints.length - 1].x.toFixed(2)} ${(height - padBottom).toFixed(2)} L ${chartPoints[0].x.toFixed(2)} ${(height - padBottom).toFixed(2)} Z`
+      : '';
+
+  const firstLabel = points[0]?.label ?? '';
+  const middleLabel = points[Math.floor((points.length - 1) / 2)]?.label ?? '';
+  const lastLabel = points[points.length - 1]?.label ?? '';
+
+  const endPoint = chartPoints.length > 0 ? chartPoints[chartPoints.length - 1] : null;
 
   return (
     <View style={styles.card}>
-      <View style={styles.header}>
-        <Text style={styles.title}>Receitas vs Despesas</Text>
-        <View style={styles.legendRow}>
-          <View style={styles.legendItem}>
-            <View style={[styles.dot, { backgroundColor: colors.chartIncome }]} />
-            <Text style={styles.legendLabel}>Receita</Text>
-          </View>
-          <View style={styles.legendItem}>
-            <View style={[styles.dot, { backgroundColor: colors.chartExpense }]} />
-            <Text style={styles.legendLabel}>Despesa</Text>
-          </View>
-        </View>
+      <Text style={styles.kicker}>Evolucao do saldo</Text>
+
+      <View style={styles.chartWrap}>
+        <Svg width="100%" height={height} viewBox={`0 0 ${width} ${height}`}>
+          <Defs>
+            <LinearGradient id="balanceFill" x1="0" y1="0" x2="0" y2="1">
+              <Stop offset="0%" stopColor={colors.chartExpense} stopOpacity="0.45" />
+              <Stop offset="100%" stopColor={colors.chartExpense} stopOpacity="0.03" />
+            </LinearGradient>
+          </Defs>
+
+          {areaPath ? <Path d={areaPath} fill="url(#balanceFill)" /> : null}
+          {linePath ? <Path d={linePath} stroke={colors.chartExpense} strokeWidth={2.2} fill="none" /> : null}
+
+          {endPoint ? (
+            <Path
+              d={`M ${endPoint.x - 4} ${endPoint.y} a 4 4 0 1 0 8 0 a 4 4 0 1 0 -8 0`}
+              fill={colors.chartExpense}
+            />
+          ) : null}
+        </Svg>
       </View>
 
-      <View style={styles.chartRow}>
-        {points.map((point) => {
-          const incomeHeight = (point.income / maxValue) * 120;
-          const expenseHeight = (point.expense / maxValue) * 120;
-
-          return (
-            <View key={point.label} style={styles.group}>
-              <View style={styles.bars}>
-                <View
-                  style={[
-                    styles.bar,
-                    { backgroundColor: colors.chartIncome, height: Math.max(6, incomeHeight) },
-                  ]}
-                />
-                <View
-                  style={[
-                    styles.bar,
-                    { backgroundColor: colors.chartExpense, height: Math.max(6, expenseHeight) },
-                  ]}
-                />
-              </View>
-              <Text style={styles.label}>{point.label}</Text>
-            </View>
-          );
-        })}
+      <View style={styles.labelsRow}>
+        <Text style={styles.label}>{firstLabel}</Text>
+        <Text style={styles.label}>{middleLabel}</Text>
+        <Text style={styles.label}>{lastLabel}</Text>
       </View>
     </View>
   );
@@ -70,64 +104,27 @@ const createStyles = (colors: any) =>
       borderColor: colors.border,
       backgroundColor: colors.surface,
       padding: spacing.lg,
-      gap: spacing.lg,
-    },
-    header: {
-      flexDirection: 'row',
-      justifyContent: 'space-between',
-      alignItems: 'center',
       gap: spacing.sm,
     },
-    title: {
-      color: colors.textPrimary,
-      fontSize: 16,
-      fontWeight: '500',
-    },
-    legendRow: {
-      flexDirection: 'row',
-      gap: spacing.md,
-    },
-    legendItem: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: spacing.xs,
-    },
-    dot: {
-      width: 8,
-      height: 8,
-      borderRadius: radii.pill,
-    },
-    legendLabel: {
+    kicker: {
       color: colors.textSecondary,
-      fontSize: 12,
+      fontSize: 16,
+      fontWeight: '700',
+      letterSpacing: 0,
     },
-    chartRow: {
-      minHeight: 150,
+    chartWrap: {
+      marginTop: spacing.xs,
+      borderRadius: radii.md,
+      overflow: 'hidden',
+    },
+    labelsRow: {
       flexDirection: 'row',
       justifyContent: 'space-between',
-      alignItems: 'flex-end',
-    },
-    group: {
-      alignItems: 'center',
-      gap: spacing.sm,
-      flex: 1,
-    },
-    bars: {
-      flexDirection: 'row',
-      alignItems: 'flex-end',
-      gap: 6,
-      height: 126,
-    },
-    bar: {
-      width: 14,
-      borderTopLeftRadius: radii.pill,
-      borderTopRightRadius: radii.pill,
-      borderBottomLeftRadius: 0,
-      borderBottomRightRadius: 0,
+      marginTop: -6,
     },
     label: {
       color: colors.textMuted,
-      fontSize: 12,
-      fontWeight: '600',
+      fontSize: 11,
+      fontWeight: '500',
     },
   });
