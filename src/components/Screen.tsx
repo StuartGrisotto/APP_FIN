@@ -26,7 +26,7 @@ export const Screen = ({ children, scrollable = true }: ScreenProps) => {
   if (!scrollable) {
     return (
       <SafeAreaView style={styles.safeArea}>
-        <View style={[styles.container, { paddingTop: topPadding }]}>{children}</View>
+        <View style={[styles.container, styles.fill, { paddingTop: topPadding }]}>{children}</View>
       </SafeAreaView>
     );
   }
@@ -58,5 +58,8 @@ const createStyles = (colors: { background: string }) =>
       paddingHorizontal: spacing.lg,
       paddingBottom: spacing.xxxl,
       gap: spacing.lg,
+    },
+    fill: {
+      flex: 1,
     },
   });
