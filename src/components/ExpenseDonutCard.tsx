@@ -1,6 +1,6 @@
 ﻿import { Pressable, StyleSheet, Text, View } from 'react-native';
 import Svg, { Circle, G, Path } from 'react-native-svg';
-import { getCategoryColor, getCategoryLabel } from '../constants/categories';
+import { getCategoryLabel } from '../constants/categories';
 import { useAppTheme } from '../context/ThemeContext';
 import { Transaction } from '../types/finance';
 import { radii, spacing } from '../theme/tokens';
@@ -19,6 +19,17 @@ interface CategorySlice {
   percentage: number;
   color: string;
 }
+
+const getMonochromeColor = (index: number, total: number): string => {
+  if (total <= 1) {
+    return '#FFFFFF';
+  }
+
+  const ratio = index / (total - 1);
+  const channel = Math.round(255 * (1 - ratio));
+  const hex = channel.toString(16).padStart(2, '0').toUpperCase();
+  return `#${hex}${hex}${hex}`;
+};
 
 const polarToCartesian = (cx: number, cy: number, radius: number, angle: number) => {
   const radians = ((angle - 90) * Math.PI) / 180;
@@ -69,14 +80,15 @@ export const ExpenseDonutCard = ({
     return acc;
   }, {});
 
-  const slices: CategorySlice[] = Object.entries(grouped)
-    .map(([category, value]) => ({
+  const sortedEntries = Object.entries(grouped).sort((a, b) => b[1] - a[1]);
+
+  const slices: CategorySlice[] = sortedEntries
+    .map(([category, value], index, arr) => ({
       category,
       value,
       percentage: total > 0 ? (value / total) * 100 : 0,
-      color: getCategoryColor(category),
-    }))
-    .sort((a, b) => b.value - a.value);
+      color: getMonochromeColor(index, arr.length),
+    }));
 
   const visibleSlices = slices.slice(0, 5);
   const hiddenCount = Math.max(0, slices.length - visibleSlices.length);
@@ -115,8 +127,8 @@ export const ExpenseDonutCard = ({
                     d={arcPath(cx, cy, outerRadius, innerRadius, startAngle, endAngle)}
                     fill={slice.color}
                     opacity={dimmed ? 0.3 : 1}
-                    stroke={active ? colors.textPrimary : 'transparent'}
-                    strokeWidth={active ? 1.8 : 0}
+                    stroke={active ? colors.textPrimary : colors.background}
+                    strokeWidth={active ? 1.8 : 1}
                     onPress={() => onSelectCategory?.(active ? null : slice.category)}
                   />
                 </G>
