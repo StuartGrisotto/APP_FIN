@@ -1,12 +1,14 @@
 import { Ionicons } from '@expo/vector-icons';
-import * as DocumentPicker from 'expo-document-picker';
-import * as FileSystem from 'expo-file-system/legacy';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { useState } from 'react';
+import { Modal, Pressable, StyleSheet, Text, View } from 'react-native';
+import { PluggyConnect } from 'react-native-pluggy-connect';
 import { PrimaryButton } from '../components/PrimaryButton';
 import { Screen } from '../components/Screen';
+import { backendBaseUrl } from '../config/backend';
 import { useAuth } from '../context/AuthContext';
 import { useFinance } from '../context/FinanceContext';
 import { useAppTheme } from '../context/ThemeContext';
+import { pluggyService } from '../services/pluggyService';
 import { ThemeMode } from '../theme/palettes';
 import { radii, spacing } from '../theme/tokens';
 
@@ -45,35 +47,36 @@ export const SettingsScreen = ({ onBackToHome }: SettingsScreenProps) => {
   const { user, logout } = useAuth();
   const {
     dashboard,
-    importingStatement,
-    statementImportFeedback,
-    importStatementCsv,
-    clearStatementFeedback,
+    importingPluggy,
+    pluggyImportFeedback,
+    importPluggyItem,
+    clearPluggyFeedback,
   } = useFinance();
+  const [lastConnectedItemId, setLastConnectedItemId] = useState<string | null>(null);
+  const [connectToken, setConnectToken] = useState<string | null>(null);
+  const [meuPluggyConnectorId, setMeuPluggyConnectorId] = useState<number | null>(null);
+  const [creatingConnectToken, setCreatingConnectToken] = useState(false);
+  const [pluggyFlowError, setPluggyFlowError] = useState<string | null>(null);
 
-  const handleImportStatement = async () => {
-    clearStatementFeedback();
+  const handleCreateConnectToken = async () => {
+    setCreatingConnectToken(true);
+    setPluggyFlowError(null);
+    clearPluggyFeedback();
 
-    const picked = await DocumentPicker.getDocumentAsync({
-      multiple: false,
-      copyToCacheDirectory: true,
-      type: ['text/csv', 'text/comma-separated-values', 'application/vnd.ms-excel', '*/*'],
-    });
-
-    if (picked.canceled) {
-      return;
+    try {
+      const clientUserId = user?.id ? `appfin-${user.id}` : `appfin-${Date.now()}`;
+      const data = await pluggyService.createConnectToken(clientUserId);
+      setMeuPluggyConnectorId(data.meuPluggyConnectorId);
+      setConnectToken(data.connectToken);
+    } catch (error) {
+      const message =
+        error instanceof Error
+          ? error.message
+          : 'Nao foi possivel iniciar o Pluggy Connect.';
+      setPluggyFlowError(message);
+    } finally {
+      setCreatingConnectToken(false);
     }
-
-    const asset = picked.assets[0];
-    if (!asset?.uri) {
-      return;
-    }
-
-    const csvContent = await FileSystem.readAsStringAsync(asset.uri, {
-      encoding: FileSystem.EncodingType.UTF8,
-    });
-
-    await importStatementCsv(csvContent);
   };
 
   return (
@@ -140,37 +143,90 @@ export const SettingsScreen = ({ onBackToHome }: SettingsScreenProps) => {
       <View style={styles.statementCard}>
         <View style={styles.statementHeader}>
           <View style={styles.statementIconBox}>
-            <Ionicons name="document-text-outline" size={18} color={colors.accentBlue} />
+            <Ionicons name="link-outline" size={18} color={colors.primary} />
           </View>
 
           <View style={styles.statementInfo}>
-            <Text style={styles.statementTitle}>Adicionar extrato (CSV)</Text>
-            <Text style={styles.statementSubtitle}>Acumula historico e remove duplicados automaticamente</Text>
+            <Text style={styles.statementTitle}>Open Finance (Pluggy)</Text>
+            <Text style={styles.statementSubtitle}>Conecte e importe transacoes bancarias</Text>
           </View>
         </View>
 
         <Text style={styles.statementDescription}>
-          Selecione o arquivo CSV do banco no celular. O app soma no historico existente e ignora lancamentos repetidos.
+          Abra o Pluggy Connect dentro do app, conecte via MeuPluggy e a importacao das transacoes reais sera feita automaticamente.
         </Text>
 
-        <Text style={styles.metaLine}>
-          Total de movimentacoes no app: {dashboard?.transactions.length ?? 0}
-        </Text>
+        <Text style={styles.metaLine}>Backend: {backendBaseUrl}</Text>
+        <Text style={styles.metaLine}>Total de movimentacoes no app: {dashboard?.transactions.length ?? 0}</Text>
 
-        {statementImportFeedback ? <Text style={styles.feedbackText}>{statementImportFeedback}</Text> : null}
+        <PrimaryButton
+          label="Conectar MeuPluggy"
+          onPress={() => {
+            handleCreateConnectToken().catch(() => {
+              // erro tratado no estado local
+            });
+          }}
+          loading={creatingConnectToken}
+        />
 
-        <View style={styles.buttons}>
-          <PrimaryButton
-            label="Selecionar extrato CSV"
-            onPress={() => {
-              handleImportStatement().catch(() => {
-                // feedback exibido no contexto ao falhar no parse/import
-              });
-            }}
-            loading={importingStatement}
-          />
-        </View>
+        {lastConnectedItemId ? <Text style={styles.metaLine}>Ultimo item conectado: {lastConnectedItemId}</Text> : null}
+        {importingPluggy ? <Text style={styles.metaLine}>Importando transacoes do item conectado...</Text> : null}
+        {pluggyFlowError ? <Text style={styles.errorText}>{pluggyFlowError}</Text> : null}
+        {pluggyImportFeedback ? <Text style={styles.feedbackText}>{pluggyImportFeedback}</Text> : null}
       </View>
+
+      <Modal visible={Boolean(connectToken)} animationType="slide" presentationStyle="fullScreen">
+        <View style={styles.connectModal}>
+          <View style={styles.connectHeader}>
+            <Text style={styles.connectTitle}>Pluggy Connect</Text>
+            <Pressable
+              style={styles.connectClose}
+              onPress={() => {
+                setConnectToken(null);
+              }}
+            >
+              <Ionicons name="close" size={20} color={colors.textPrimary} />
+            </Pressable>
+          </View>
+
+          {connectToken ? (
+            <PluggyConnect
+              connectToken={connectToken}
+              includeSandbox={false}
+              connectorIds={meuPluggyConnectorId ? [meuPluggyConnectorId] : undefined}
+              selectedConnectorId={meuPluggyConnectorId ?? undefined}
+              language="pt"
+              theme={mode === 'dark' ? 'dark' : 'light'}
+              onSuccess={({ item }) => {
+                const itemId = item?.id;
+                if (!itemId) {
+                  return;
+                }
+
+                setLastConnectedItemId(itemId);
+                setConnectToken(null);
+                setPluggyFlowError(null);
+                clearPluggyFeedback();
+                importPluggyItem(itemId)
+                  .catch((error) => {
+                    const message =
+                      error instanceof Error
+                        ? error.message
+                        : 'Falha ao importar transacoes apos conectar o banco.';
+                    setPluggyFlowError(message);
+                  });
+              }}
+              onError={(error) => {
+                const message = error?.message || 'Erro no Pluggy Connect.';
+                setPluggyFlowError(message);
+              }}
+              onClose={() => {
+                setConnectToken(null);
+              }}
+            />
+          ) : null}
+        </View>
+      </Modal>
     </Screen>
   );
 };
@@ -400,6 +456,39 @@ const createStyles = (colors: any, mode: ThemeMode) =>
       color: mode === 'dark' ? colors.success : colors.accentBlue,
       fontSize: 12,
       fontWeight: '600',
+    },
+    errorText: {
+      color: colors.destructive,
+      fontSize: 12,
+      fontWeight: '600',
+    },
+    connectModal: {
+      flex: 1,
+      backgroundColor: colors.background,
+    },
+    connectHeader: {
+      height: 60,
+      paddingHorizontal: spacing.lg,
+      borderBottomWidth: 1,
+      borderBottomColor: colors.border,
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+    },
+    connectTitle: {
+      color: colors.textPrimary,
+      fontSize: 18,
+      fontWeight: '800',
+    },
+    connectClose: {
+      width: 36,
+      height: 36,
+      borderRadius: radii.md,
+      borderWidth: 1,
+      borderColor: colors.border,
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: colors.surface,
     },
     buttons: {
       gap: spacing.sm,

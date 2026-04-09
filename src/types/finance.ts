@@ -64,3 +64,9 @@ export interface StatementImportResult {
   invalidCount: number;
   totalRead: number;
 }
+
+export interface PluggyImportResult extends StatementImportResult {
+  itemId: string;
+  accountCount: number;
+  pulledTransactions: number;
+}

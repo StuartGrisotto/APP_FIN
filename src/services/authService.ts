@@ -1,29 +1,45 @@
-﻿import { appCredentials } from '../config/appCredentials';
+import * as LocalAuthentication from 'expo-local-authentication';
 import { mockUser } from '../mocks/financeData';
-import { LoginPayload, User } from '../types/finance';
+import { User } from '../types/finance';
 
 const wait = (ms: number): Promise<void> =>
   new Promise((resolve) => setTimeout(resolve, ms));
 
 export const authService = {
-  async login(payload: LoginPayload): Promise<{ token: string; user: User }> {
-    await wait(900);
+  async unlockWithBiometrics(): Promise<{ token: string; user: User }> {
+    await wait(150);
 
-    const isValidEmail =
-      payload.email.trim().toLowerCase() === appCredentials.email.toLowerCase();
-    const isValidPassword = payload.password === appCredentials.password;
+    const hasHardware = await LocalAuthentication.hasHardwareAsync();
+    if (!hasHardware) {
+      throw new Error('Este dispositivo nao possui hardware de biometria.');
+    }
 
-    if (!isValidEmail || !isValidPassword) {
-      throw new Error('Credenciais invalidas. Verifique e tente novamente.');
+    const enrolled = await LocalAuthentication.isEnrolledAsync();
+    if (!enrolled) {
+      throw new Error('Nenhuma biometria cadastrada no dispositivo.');
+    }
+
+    const result = await LocalAuthentication.authenticateAsync({
+      promptMessage: 'Acesse o Fluxo Financeiro',
+      cancelLabel: 'Cancelar',
+      disableDeviceFallback: false,
+    });
+
+    if (!result.success) {
+      if (result.error === 'user_cancel' || result.error === 'system_cancel') {
+        throw new Error('Autenticacao cancelada.');
+      }
+
+      throw new Error('Nao foi possivel validar a biometria.');
     }
 
     return {
-      token: 'fixed-login-session-token',
+      token: `biometric-session-${Date.now()}`,
       user: mockUser,
     };
   },
 
   async logout(): Promise<void> {
-    await wait(300);
+    await wait(120);
   },
 };

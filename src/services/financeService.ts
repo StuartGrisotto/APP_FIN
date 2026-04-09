@@ -1,23 +1,25 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as FileSystem from 'expo-file-system/legacy';
 import { buildMockDashboard } from '../mocks/financeData';
-import { january2026SeedTransactions } from '../mocks/statementSeed';
 import {
   CreateTransactionPayload,
   DashboardData,
   PeriodFilter,
+  PluggyImportResult,
   StatementImportResult,
   Transaction,
+  TransactionCategory,
 } from '../types/finance';
+import { pluggyService } from './pluggyService';
 import { mergeParsedTransactions, parseNubankCsv } from './statementImport';
 
 const wait = (ms: number): Promise<void> =>
   new Promise((resolve) => setTimeout(resolve, ms));
 
-const STORAGE_KEY = 'app_fin_transactions_v1';
-const STORAGE_FILE = `${FileSystem.documentDirectory ?? ''}app_fin_transactions_v1.json`;
+const STORAGE_KEY = 'app_fin_transactions_realonly_v1';
+const STORAGE_FILE = `${FileSystem.documentDirectory ?? ''}app_fin_transactions_realonly_v1.json`;
 
-let transactionsDb: Transaction[] = [...january2026SeedTransactions];
+let transactionsDb: Transaction[] = [];
 let hydrated = false;
 
 const readFromFileBackup = async (): Promise<Transaction[] | null> => {
@@ -65,7 +67,7 @@ const hydrateTransactions = async () => {
     const raw = await AsyncStorage.getItem(STORAGE_KEY);
     if (raw) {
       const parsed = JSON.parse(raw) as Transaction[];
-      transactionsDb = Array.isArray(parsed) ? parsed : [...january2026SeedTransactions];
+      transactionsDb = Array.isArray(parsed) ? parsed : [];
       hydrated = true;
       return;
     }
@@ -78,7 +80,7 @@ const hydrateTransactions = async () => {
       return;
     }
 
-    transactionsDb = [...january2026SeedTransactions];
+    transactionsDb = [];
     await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(transactionsDb));
     await writeToFileBackup(transactionsDb);
   } catch {
@@ -86,7 +88,7 @@ const hydrateTransactions = async () => {
     if (fileBackup) {
       transactionsDb = fileBackup;
     } else {
-      transactionsDb = [...january2026SeedTransactions];
+      transactionsDb = [];
     }
   }
 
@@ -116,6 +118,56 @@ const persistTransactions = async () => {
   if (!asyncStorageOk && !fileOk) {
     throw new Error('Nao foi possivel salvar os dados localmente no dispositivo.');
   }
+};
+
+const normalizeText = (value: string) =>
+  value
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+const buildFallbackKey = (date: string, amount: number, description: string) =>
+  `${date}|${amount.toFixed(2)}|${normalizeText(description)}`;
+
+const pickCategory = (description: string): TransactionCategory => {
+  const text = normalizeText(description);
+
+  if (text.includes('uber') || text.includes('combustivel') || text.includes('gasolina')) {
+    return 'transport';
+  }
+
+  if (text.includes('mercado') || text.includes('restaurante') || text.includes('ifood')) {
+    return 'food';
+  }
+
+  if (text.includes('farmacia') || text.includes('clinica') || text.includes('hospital')) {
+    return 'health';
+  }
+
+  if (text.includes('aluguel') || text.includes('condominio')) {
+    return 'housing';
+  }
+
+  if (text.includes('salario') || text.includes('folha') || text.includes('pro-labore')) {
+    return 'salary';
+  }
+
+  if (text.includes('cinema') || text.includes('netflix') || text.includes('spotify')) {
+    return 'leisure';
+  }
+
+  return 'others';
+};
+
+const toDateIso = (raw: string): string => {
+  const parsed = new Date(raw);
+  if (!Number.isNaN(parsed.getTime())) {
+    return parsed.toISOString();
+  }
+
+  return new Date().toISOString();
 };
 
 export const financeService = {
@@ -164,5 +216,84 @@ export const financeService = {
     transactionsDb = nextTransactions;
     await persistTransactions();
     return result;
+  },
+
+  async importPluggyItem(itemId: string): Promise<PluggyImportResult> {
+    await hydrateTransactions();
+    await wait(250);
+
+    const payload = await pluggyService.importItemTransactions(itemId);
+
+    const existingKeys = new Set<string>();
+    for (const item of transactionsDb) {
+      existingKeys.add(item.id);
+      existingKeys.add(
+        buildFallbackKey(
+          item.date,
+          item.type === 'income' ? item.amount : -item.amount,
+          item.title,
+        ),
+      );
+    }
+
+    const accepted: Transaction[] = [];
+    let duplicateCount = 0;
+    let invalidCount = 0;
+
+    for (const tx of payload.transactions) {
+      const description = String(tx.description || '').trim();
+      const dateIso = toDateIso(tx.date);
+      const amountSigned = Number(tx.amount);
+      const id = String(tx.id || '').trim();
+
+      if (!id || !description || !Number.isFinite(amountSigned)) {
+        invalidCount += 1;
+        continue;
+      }
+
+      const loweredType = String(tx.type || '').toLowerCase();
+      const isIncomeByType = loweredType.includes('credit') || loweredType.includes('income');
+      const isIncome = isIncomeByType || amountSigned > 0;
+      const amount = Math.abs(amountSigned);
+
+      const transaction: Transaction = {
+        id: `pluggy_${id}`,
+        title: description,
+        category: pickCategory(description),
+        type: isIncome ? 'income' : 'expense',
+        amount,
+        date: dateIso,
+      };
+
+      const fallback = buildFallbackKey(
+        transaction.date,
+        transaction.type === 'income' ? transaction.amount : -transaction.amount,
+        transaction.title,
+      );
+
+      if (existingKeys.has(transaction.id) || existingKeys.has(fallback)) {
+        duplicateCount += 1;
+        continue;
+      }
+
+      existingKeys.add(transaction.id);
+      existingKeys.add(fallback);
+      accepted.push(transaction);
+    }
+
+    transactionsDb = [...accepted, ...transactionsDb].sort(
+      (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime(),
+    );
+    await persistTransactions();
+
+    return {
+      itemId: payload.itemId,
+      accountCount: payload.accountCount,
+      pulledTransactions: payload.transactionCount,
+      importedCount: accepted.length,
+      duplicateCount,
+      invalidCount,
+      totalRead: payload.transactions.length,
+    };
   },
 };

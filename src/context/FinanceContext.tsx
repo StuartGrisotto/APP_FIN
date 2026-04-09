@@ -13,6 +13,7 @@ import {
   CreateTransactionPayload,
   DashboardData,
   PeriodFilter,
+  PluggyImportResult,
   StatementImportResult,
 } from '../types/finance';
 
@@ -21,13 +22,17 @@ interface FinanceContextValue {
   period: PeriodFilter;
   loadingDashboard: boolean;
   importingStatement: boolean;
+  importingPluggy: boolean;
   addingTransaction: boolean;
   statementImportFeedback: string | null;
+  pluggyImportFeedback: string | null;
   setPeriod: (period: PeriodFilter) => void;
   refreshDashboard: () => Promise<void>;
   addTransaction: (payload: CreateTransactionPayload) => Promise<void>;
   importStatementCsv: (csvContent: string) => Promise<StatementImportResult>;
+  importPluggyItem: (itemId: string) => Promise<PluggyImportResult>;
   clearStatementFeedback: () => void;
+  clearPluggyFeedback: () => void;
 }
 
 const FinanceContext = createContext<FinanceContextValue | undefined>(undefined);
@@ -37,8 +42,10 @@ export const FinanceProvider = ({ children }: PropsWithChildren) => {
   const [period, setPeriodState] = useState<PeriodFilter>('month');
   const [loadingDashboard, setLoadingDashboard] = useState(true);
   const [importingStatement, setImportingStatement] = useState(false);
+  const [importingPluggy, setImportingPluggy] = useState(false);
   const [addingTransaction, setAddingTransaction] = useState(false);
   const [statementImportFeedback, setStatementImportFeedback] = useState<string | null>(null);
+  const [pluggyImportFeedback, setPluggyImportFeedback] = useState<string | null>(null);
   const firstLoadRef = useRef(true);
 
   const loadDashboard = useCallback(async (activePeriod: PeriodFilter, fullScreenLoader: boolean) => {
@@ -113,26 +120,59 @@ export const FinanceProvider = ({ children }: PropsWithChildren) => {
     setStatementImportFeedback(null);
   };
 
+  const importPluggyItem = async (itemId: string): Promise<PluggyImportResult> => {
+    setImportingPluggy(true);
+    setPluggyImportFeedback(null);
+
+    try {
+      const result = await financeService.importPluggyItem(itemId);
+      await refreshDashboard();
+
+      const summary = `Pluggy sincronizado: ${result.importedCount} novas, ${result.duplicateCount} duplicadas, ${result.invalidCount} invalidas. Contas: ${result.accountCount}.`;
+      setPluggyImportFeedback(summary);
+      return result;
+    } catch (error) {
+      const message =
+        error instanceof Error
+          ? error.message
+          : 'Nao foi possivel importar do Pluggy.';
+      setPluggyImportFeedback(message);
+      throw error;
+    } finally {
+      setImportingPluggy(false);
+    }
+  };
+
+  const clearPluggyFeedback = () => {
+    setPluggyImportFeedback(null);
+  };
+
   const value = useMemo<FinanceContextValue>(
     () => ({
       dashboard,
       period,
       loadingDashboard,
       importingStatement,
+      importingPluggy,
       addingTransaction,
       statementImportFeedback,
+      pluggyImportFeedback,
       setPeriod,
       refreshDashboard,
       addTransaction,
       importStatementCsv,
+      importPluggyItem,
       clearStatementFeedback,
+      clearPluggyFeedback,
     }),
     [
       addingTransaction,
       dashboard,
       loadingDashboard,
+      importingPluggy,
       importingStatement,
       period,
+      pluggyImportFeedback,
       statementImportFeedback,
     ],
   );

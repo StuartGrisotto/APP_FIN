@@ -1,7 +1,6 @@
 ﻿import { Ionicons } from '@expo/vector-icons';
-import { useMemo, useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
-import { InputField } from '../components/InputField';
+import { useCallback, useEffect, useRef } from 'react';
+import { Image, StyleSheet, Text, View } from 'react-native';
 import { PrimaryButton } from '../components/PrimaryButton';
 import { Screen } from '../components/Screen';
 import { useAuth } from '../context/AuthContext';
@@ -11,86 +10,67 @@ import { radii, spacing } from '../theme/tokens';
 export const LoginScreen = () => {
   const { colors } = useAppTheme();
   const styles = createStyles(colors);
-  const { login, loggingIn, loginError } = useAuth();
+  const { unlockWithBiometrics, clearLoginError, loggingIn, loginError } = useAuth();
+  const attemptedAutoUnlock = useRef(false);
 
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [touched, setTouched] = useState(false);
-
-  const errors = useMemo(() => {
-    if (!touched) {
-      return { email: null, password: null };
-    }
-
-    return {
-      email: email.includes('@') ? null : 'Digite um e-mail valido.',
-      password: password.length >= 6 ? null : 'Senha deve ter ao menos 6 caracteres.',
-    };
-  }, [email, password, touched]);
-
-  const handleLogin = async () => {
-    setTouched(true);
-
-    if (errors.email || errors.password) {
-      return;
-    }
+  const handleBiometricUnlock = useCallback(async () => {
+    clearLoginError();
 
     try {
-      await login({ email, password });
+      await unlockWithBiometrics();
     } catch {
       // erro tratado no contexto
     }
-  };
+  }, [clearLoginError, unlockWithBiometrics]);
+
+  useEffect(() => {
+    if (attemptedAutoUnlock.current) {
+      return;
+    }
+
+    attemptedAutoUnlock.current = true;
+    handleBiometricUnlock().catch(() => {
+      // erro tratado no contexto
+    });
+  }, [handleBiometricUnlock]);
 
   return (
-    <Screen>
+    <Screen scrollable={false}>
       <View style={styles.container}>
-        <View style={styles.brandCircle}>
-          <Ionicons name="trending-up" size={42} color={colors.primary} />
-        </View>
+        <View style={styles.content}>
+          <View style={styles.logoCard}>
+            <Image
+              source={require('../../assets/LogoStuart.png')}
+              resizeMode="contain"
+              style={styles.logoImage}
+            />
+          </View>
 
-        <Text style={styles.title}>Fluxo Financeiro</Text>
-        <Text style={styles.subtitle}>Entre para acompanhar sua vida financeira</Text>
+          <View style={styles.titleBox}>
+            <Text style={styles.title}>Fluxo Financeiro</Text>
+            <Text style={styles.subtitle}>Desbloqueie com biometria para entrar no app</Text>
+          </View>
 
-        <View style={styles.form}>
-          <InputField
-            label="E-mail"
-            value={email}
-            onChangeText={setEmail}
-            placeholder="voce@email.com"
-            keyboardType="email-address"
-            icon={<Ionicons name="mail-outline" size={18} color={colors.textMuted} />}
-            error={errors.email}
-          />
+          <View style={styles.form}>
+            <View style={styles.infoRow}>
+              <Ionicons name="finger-print-outline" size={20} color={colors.primary} />
+              <Text style={styles.statusText}>
+                {loggingIn ? 'Aguardando autenticacao biometrica...' : 'Use sua biometria para continuar.'}
+              </Text>
+            </View>
 
-          <InputField
-            label="Senha"
-            value={password}
-            onChangeText={setPassword}
-            placeholder="******"
-            secureTextEntry
-            icon={<Ionicons name="lock-closed-outline" size={18} color={colors.textMuted} />}
-            error={errors.password}
-          />
+            {loginError ? <Text style={styles.globalError}>{loginError}</Text> : null}
 
-          {loginError ? <Text style={styles.globalError}>{loginError}</Text> : null}
-
-          <PrimaryButton label="Entrar" onPress={handleLogin} loading={loggingIn} />
-
-          <Pressable>
-            <Text style={styles.helperLink}>Esqueci minha senha</Text>
-          </Pressable>
-
-          <Pressable style={styles.linkRow}>
-            <Text style={styles.linkHint}>Ainda nao tem conta?</Text>
-            <Text style={styles.linkStrong}> Criar conta</Text>
-          </Pressable>
-
-          <PrimaryButton
-            variant="ghost"
-            label="Continuar com Google (em breve)"
-            onPress={() => undefined}
-          />
+            <PrimaryButton
+              label={loggingIn ? 'Autenticando...' : 'Entrar com biometria'}
+              onPress={() => {
+                handleBiometricUnlock().catch(() => {
+                  // erro tratado no contexto
+                });
+              }}
+              loading={loggingIn}
+            />
+          </View>
         </View>
       </View>
     </Screen>
@@ -100,59 +80,66 @@ export const LoginScreen = () => {
 const createStyles = (colors: any) =>
   StyleSheet.create({
     container: {
-      gap: spacing.lg,
-      paddingBottom: spacing.xxxl,
-    },
-    brandCircle: {
-      width: 88,
-      height: 88,
-      borderRadius: radii.pill,
-      backgroundColor: colors.primarySoft,
-      borderWidth: 1,
-      borderColor: colors.border,
+      flex: 1,
       justifyContent: 'center',
       alignItems: 'center',
-      alignSelf: 'center',
-      marginTop: spacing.md,
+      gap: spacing.lg,
+      paddingBottom: spacing.md,
+    },
+    content: {
+      width: '100%',
+      maxWidth: 420,
+      gap: spacing.lg,
+    },
+    logoCard: {
+      width: '100%',
+      height: 220,
+      borderRadius: radii.xl,
+      backgroundColor: colors.surface,
+      borderWidth: 1,
+      borderColor: colors.border,
+      alignItems: 'center',
+      justifyContent: 'center',
+      padding: spacing.lg,
+    },
+    logoImage: {
+      width: '100%',
+      height: '100%',
+    },
+    titleBox: {
+      gap: spacing.xs,
     },
     title: {
       color: colors.textPrimary,
-      fontSize: 36,
+      fontSize: 34,
       fontWeight: '800',
       textAlign: 'center',
-      letterSpacing: -1,
+      letterSpacing: -0.8,
     },
     subtitle: {
       color: colors.textSecondary,
-      fontSize: 16,
+      fontSize: 15,
       textAlign: 'center',
     },
     form: {
       borderRadius: radii.xl,
       borderWidth: 1,
       borderColor: colors.border,
-      backgroundColor: colors.backgroundElevated,
+      backgroundColor: colors.surface,
       padding: spacing.xl,
       gap: spacing.md,
     },
-    helperLink: {
-      color: colors.accentBlue,
-      textAlign: 'center',
-      fontSize: 14,
-      fontWeight: '600',
-    },
-    linkRow: {
+    infoRow: {
       flexDirection: 'row',
+      alignItems: 'center',
       justifyContent: 'center',
+      gap: spacing.sm,
     },
-    linkHint: {
-      color: colors.textSecondary,
-      fontSize: 14,
-    },
-    linkStrong: {
+    statusText: {
       color: colors.textPrimary,
       fontSize: 14,
-      fontWeight: '700',
+      textAlign: 'center',
+      fontWeight: '600',
     },
     globalError: {
       color: colors.destructive,
