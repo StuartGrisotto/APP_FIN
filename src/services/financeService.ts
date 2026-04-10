@@ -2,6 +2,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as FileSystem from 'expo-file-system/legacy';
 import {
   buildCategoryOptions,
+  getCategoryLabel,
   normalizeCounterpartyName,
   slugifyCategoryLabel,
 } from '../constants/categories';
@@ -25,6 +26,7 @@ const wait = (ms: number): Promise<void> =>
 const STORAGE_KEY = 'app_fin_transactions_realonly_v1';
 const STORAGE_FILE = `${FileSystem.documentDirectory ?? ''}app_fin_transactions_realonly_v1.json`;
 const PLUGGY_LAST_SYNC_KEY = 'app_fin_pluggy_last_sync_at_v1';
+const PLUGGY_AVAILABLE_BALANCE_KEY = 'app_fin_pluggy_available_balance_v1';
 const CATEGORY_RULES_KEY = 'app_fin_category_rules_v1';
 const CATEGORY_LABELS_KEY = 'app_fin_custom_category_labels_v1';
 
@@ -220,7 +222,28 @@ const persistCustomCategoryLabels = async () => {
 export const financeService = {
   async getCategoryOptions(): Promise<CategoryOption[]> {
     await hydrateTransactions();
-    return buildCategoryOptions(customCategoryLabelsDb);
+    const options = buildCategoryOptions(customCategoryLabelsDb);
+    const knownIds = new Set(options.map((item) => item.id));
+    const discoveredIds = new Set<string>([
+      ...transactionsDb.map((item) => item.category),
+      ...Object.values(categoryRulesDb),
+    ]);
+
+    const discoveredCustomOptions: CategoryOption[] = [];
+    discoveredIds.forEach((id) => {
+      if (!id || knownIds.has(id)) {
+        return;
+      }
+
+      discoveredCustomOptions.push({
+        id,
+        label: getCategoryLabel(id, customCategoryLabelsDb),
+        isCustom: true,
+      });
+    });
+
+    discoveredCustomOptions.sort((a, b) => a.label.localeCompare(b.label, 'pt-BR'));
+    return [...options, ...discoveredCustomOptions];
   },
 
   async getCategoryLabelMap(): Promise<Record<string, string>> {
@@ -303,7 +326,21 @@ export const financeService = {
       (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime(),
     );
 
-    return buildMockDashboard(sorted, period);
+    const dashboard = buildMockDashboard(sorted, period);
+
+    try {
+      const rawAvailableBalance = await AsyncStorage.getItem(PLUGGY_AVAILABLE_BALANCE_KEY);
+      if (rawAvailableBalance !== null) {
+        const parsedAvailableBalance = Number(rawAvailableBalance);
+        if (Number.isFinite(parsedAvailableBalance)) {
+          dashboard.summary.balance += parsedAvailableBalance;
+        }
+      }
+    } catch {
+      // Falha ao ler saldo do Pluggy nao deve quebrar dashboard
+    }
+
+    return dashboard;
   },
 
   async addTransaction(payload: CreateTransactionPayload): Promise<Transaction> {
@@ -421,6 +458,18 @@ export const financeService = {
 
     try {
       await AsyncStorage.setItem(PLUGGY_LAST_SYNC_KEY, syncedAt);
+      const balanceToPersist =
+        payload.totalAvailableBalance !== null && Number.isFinite(payload.totalAvailableBalance)
+          ? payload.totalAvailableBalance
+          : payload.totalCurrentBalance !== null && Number.isFinite(payload.totalCurrentBalance)
+            ? payload.totalCurrentBalance
+            : null;
+      if (balanceToPersist !== null) {
+        await AsyncStorage.setItem(
+          PLUGGY_AVAILABLE_BALANCE_KEY,
+          String(balanceToPersist),
+        );
+      }
     } catch {
       // Falha de persistencia da data nao deve quebrar importacao
     }
@@ -429,6 +478,8 @@ export const financeService = {
       itemId: payload.itemId,
       accountCount: payload.accountCount,
       pulledTransactions: payload.transactionCount,
+      totalAvailableBalance: payload.totalAvailableBalance,
+      totalCurrentBalance: payload.totalCurrentBalance,
       importedCount: accepted.length,
       duplicateCount,
       invalidCount,

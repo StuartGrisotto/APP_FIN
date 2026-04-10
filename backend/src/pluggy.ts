@@ -162,6 +162,8 @@ export interface PullItemTransactionsResult {
   itemId: string;
   accountCount: number;
   transactionCount: number;
+  totalAvailableBalance: number | null;
+  totalCurrentBalance: number | null;
   transactions: PluggyRawTransaction[];
 }
 
@@ -177,6 +179,52 @@ const normalizeText = (value: string) =>
     .replace(/[\u0300-\u036f]/g, '')
     .toLowerCase()
     .trim();
+
+const readAccountBalance = (account: Record<string, unknown>) => {
+  const balanceObject =
+    account.balance && typeof account.balance === 'object'
+      ? (account.balance as Record<string, unknown>)
+      : null;
+  const availableCandidates = [
+    account.availableBalance,
+    account.available,
+    account.balanceAvailable,
+    account.balance_available,
+    balanceObject?.available,
+    balanceObject?.availableBalance,
+    balanceObject?.amountAvailable,
+  ];
+  const currentCandidates = [
+    account.balance,
+    account.currentBalance,
+    account.current,
+    account.current_balance,
+    balanceObject?.current,
+    balanceObject?.currentBalance,
+    balanceObject?.amount,
+    balanceObject?.value,
+  ];
+
+  let available: number | null = null;
+  for (const candidate of availableCandidates) {
+    const parsed = Number(candidate);
+    if (Number.isFinite(parsed)) {
+      available = parsed;
+      break;
+    }
+  }
+
+  let current: number | null = null;
+  for (const candidate of currentCandidates) {
+    const parsed = Number(candidate);
+    if (Number.isFinite(parsed)) {
+      current = parsed;
+      break;
+    }
+  }
+
+  return { available, current };
+};
 
 export const createConnectToken = async (clientUserId: string): Promise<string> => {
   const payload = await requestPluggy('/connect_token', {
@@ -252,11 +300,29 @@ export const pullItemTransactions = async (itemId: string): Promise<PullItemTran
 
   const transactions: PluggyRawTransaction[] = [];
   const seenTransactionIds = new Set<string>();
+  let totalAvailableBalance = 0;
+  let totalCurrentBalance = 0;
+  let availableBalanceCount = 0;
+  let currentBalanceCount = 0;
 
   await Promise.all(
     accounts.map(async (account) => {
-      const accountId = account.id;
-      if (typeof accountId !== 'string' || !accountId) {
+      const balances = readAccountBalance(account);
+      if (balances.available !== null) {
+        totalAvailableBalance += balances.available;
+        availableBalanceCount += 1;
+      }
+      if (balances.current !== null) {
+        totalCurrentBalance += balances.current;
+        currentBalanceCount += 1;
+      }
+
+      const accountIdRaw = account.id;
+      const accountId =
+        typeof accountIdRaw === 'string' || typeof accountIdRaw === 'number'
+          ? String(accountIdRaw).trim()
+          : '';
+      if (!accountId) {
         return;
       }
 
@@ -293,6 +359,8 @@ export const pullItemTransactions = async (itemId: string): Promise<PullItemTran
     itemId,
     accountCount: accounts.length,
     transactionCount: transactions.length,
+    totalAvailableBalance: availableBalanceCount > 0 ? totalAvailableBalance : null,
+    totalCurrentBalance: currentBalanceCount > 0 ? totalCurrentBalance : null,
     transactions,
   };
 };

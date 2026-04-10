@@ -57,37 +57,37 @@ export const lightColors: ThemeColors = {
 };
 
 export const darkColors: ThemeColors = {
-  primary: '#121214c9',
-  primarySoft: 'rgba(255, 255, 255, 0.06)',
+  primary: '#494ce4bb',
+  primarySoft: 'rgba(124, 108, 242, 0)',
 
-  background: '#19191B',
-  backgroundElevated: '#202024',
+  background: '#0E1117',
+  backgroundElevated: '#202B3B',
 
-  foreground: '#F5F5F5',
-  foregroundSoft: '#C7C7CC',
+  foreground: '#EEF3FF',
+  foregroundSoft: '#B2BED1',
 
-  surface: '#121214c9',
-  surfaceSoft: '#1C1C1F',
-  card: '#161618',
-  muted: '#2A2A2E',
-  border: '#ffffff1f',
+  surface: '#141A23',
+  surfaceSoft: '#1A2230',
+  card: '#1A2230',
+  muted: '#202B3B',
+  border: 'rgba(173, 188, 214, 0.18)',
 
-  textPrimary: '#FDFDFD',
-  textSecondary: '#B0B0B8',
-  textMuted: '#8A8A94',
+  textPrimary: '#EEF3FF',
+  textSecondary: '#B2BED1',
+  textMuted: '#7D889B',
 
-  accentBlue: '#EAEAEA',
-  accentGreen: '#BDBDBD',
-  accentRed: '#8F8F95',
-  accentOrange: '#5C5C61',
+  accentBlue: '#7C6CF2',
+  accentGreen: '#3FAF7A',
+  accentRed: '#C95B6D',
+  accentOrange: '#D09A63',
 
-  success: '#00ff22c9',
-  successSoft: 'rgba(52, 211, 153, 0.12)',
+  success: '#3FAF7A',
+  successSoft: 'rgba(63, 175, 122, 0.18)',
   destructive: '#fa4c4cbb',
-  destructiveSoft: 'rgba(248, 113, 113, 0.12)',
+  destructiveSoft: 'rgba(201, 91, 109, 0.18)',
 
-  chartIncome: '#01a017fd',
-  chartExpense: 'rgb(168, 3, 3)',
+  chartIncome: '#46BE89',
+  chartExpense:'#fa4c4cbb',
 
   white: '#FFFFFF',
 };

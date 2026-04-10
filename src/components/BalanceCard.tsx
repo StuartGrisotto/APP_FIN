@@ -11,8 +11,8 @@ interface BalanceCardProps {
 }
 
 export const BalanceCard = ({ summary }: BalanceCardProps) => {
-  const { colors } = useAppTheme();
-  const styles = createStyles(colors);
+  const { colors, mode } = useAppTheme();
+  const styles = createStyles(colors, mode);
   const [hidden, setHidden] = useState(false);
 
   return (
@@ -63,11 +63,11 @@ export const BalanceCard = ({ summary }: BalanceCardProps) => {
   );
 };
 
-const createStyles = (colors: any) =>
+const createStyles = (colors: any, mode: 'light' | 'dark') =>
   StyleSheet.create({
     card: {
       borderRadius: radii.xl,
-      backgroundColor: colors.primary,
+      backgroundColor: mode === 'dark' ? colors.surface : colors.primary,
       padding: spacing.xl,
       gap: spacing.sm,
     },

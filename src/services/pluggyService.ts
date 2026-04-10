@@ -12,6 +12,8 @@ interface PluggyImportResponse {
   itemId: string;
   accountCount: number;
   transactionCount: number;
+  totalAvailableBalance: number | null;
+  totalCurrentBalance: number | null;
   transactions: PluggyImportResponseTransaction[];
 }
 

@@ -152,37 +152,32 @@ const bucketByRollingWeeks = (
   });
 };
 
-const bucketByMonthWeeks = (transactions: Transaction[], referenceDate: Date): ChartPoint[] => {
-  const monthStart = new Date(
-    Date.UTC(referenceDate.getUTCFullYear(), referenceDate.getUTCMonth(), 1, 0, 0, 0, 0),
-  );
+const bucketByCurrentMonthDays = (transactions: Transaction[], today: Date): ChartPoint[] => {
+  const year = today.getFullYear();
+  const month = today.getMonth();
+  const currentDay = today.getDate();
 
-  const weekBuckets = [
-    { label: '01-07', start: 1, end: 7 },
-    { label: '08-14', start: 8, end: 14 },
-    { label: '15-21', start: 15, end: 21 },
-    { label: '22-31', start: 22, end: 31 },
-  ];
+  const buckets: ChartPoint[] = [];
 
-  return weekBuckets.map((bucket) => {
-    const points = transactions.filter((item) => {
+  for (let day = 1; day <= currentDay; day += 1) {
+    const start = new Date(year, month, day, 0, 0, 0, 0);
+    const end = new Date(year, month, day + 1, 0, 0, 0, 0);
+
+    const dayTransactions = transactions.filter((item) => {
       const date = new Date(item.date);
-      return (
-        date.getUTCFullYear() === monthStart.getUTCFullYear() &&
-        date.getUTCMonth() === monthStart.getUTCMonth() &&
-        date.getUTCDate() >= bucket.start &&
-        date.getUTCDate() <= bucket.end
-      );
+      return date >= start && date < end;
     });
 
-    const totals = sumByType(points);
+    const totals = sumByType(dayTransactions);
 
-    return {
-      label: bucket.label,
+    buckets.push({
+      label: day.toString().padStart(2, '0'),
       income: totals.income,
       expense: totals.expense,
-    };
-  });
+    });
+  }
+
+  return buckets;
 };
 
 const buildChart = (transactions: Transaction[], period: PeriodFilter): ChartPoint[] => {
@@ -197,7 +192,7 @@ const buildChart = (transactions: Transaction[], period: PeriodFilter): ChartPoi
   if (period === '30d') {
     return bucketByRollingWeeks(transactions, 30, referenceDate);
   }
-  return bucketByMonthWeeks(transactions, referenceDate);
+  return bucketByCurrentMonthDays(transactions, new Date());
 };
 
 export const buildMockDashboard = (

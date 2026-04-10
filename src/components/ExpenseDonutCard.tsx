@@ -159,9 +159,6 @@ export const ExpenseDonutCard = ({
           })}
 
           {hiddenCount > 0 ? <Text style={styles.moreText}>+{hiddenCount} outras</Text> : null}
-          {selectedCategory ? (
-            <Text style={styles.filterHint}>Filtro ativo na lista de transacoes</Text>
-          ) : null}
         </View>
       </View>
     </View>
@@ -241,11 +238,5 @@ const createStyles = (colors: any) =>
       marginTop: spacing.xs,
       color: colors.textMuted,
       fontSize: 13,
-    },
-    filterHint: {
-      marginTop: spacing.xs,
-      color: colors.primary,
-      fontSize: 12,
-      fontWeight: '700',
     },
   });

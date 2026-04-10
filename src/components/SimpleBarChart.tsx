@@ -1,4 +1,4 @@
-﻿import { StyleSheet, Text, View } from 'react-native';
+import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import Svg, { Defs, LinearGradient, Path, Stop } from 'react-native-svg';
 import { useAppTheme } from '../context/ThemeContext';
 import { ChartPoint } from '../types/finance';
@@ -29,7 +29,7 @@ export const SimpleBarChart = ({ points }: SimpleBarChartProps) => {
     return acc;
   }, []);
 
-  const width = 320;
+  const width = Math.max(320, points.length * 24);
   const height = 170;
   const padX = 8;
   const padTop = 12;
@@ -56,42 +56,48 @@ export const SimpleBarChart = ({ points }: SimpleBarChartProps) => {
       ? `${linePath} L ${chartPoints[chartPoints.length - 1].x.toFixed(2)} ${(height - padBottom).toFixed(2)} L ${chartPoints[0].x.toFixed(2)} ${(height - padBottom).toFixed(2)} Z`
       : '';
 
-  const firstLabel = points[0]?.label ?? '';
-  const middleLabel = points[Math.floor((points.length - 1) / 2)]?.label ?? '';
-  const lastLabel = points[points.length - 1]?.label ?? '';
-
   const endPoint = chartPoints.length > 0 ? chartPoints[chartPoints.length - 1] : null;
 
   return (
     <View style={styles.card}>
       <Text style={styles.kicker}>Evolucao do saldo</Text>
 
-      <View style={styles.chartWrap}>
-        <Svg width="100%" height={height} viewBox={`0 0 ${width} ${height}`}>
-          <Defs>
-            <LinearGradient id="balanceFill" x1="0" y1="0" x2="0" y2="1">
-              <Stop offset="0%" stopColor={colors.chartExpense} stopOpacity="0.45" />
-              <Stop offset="100%" stopColor={colors.chartExpense} stopOpacity="0.03" />
-            </LinearGradient>
-          </Defs>
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
+        <View style={{ width }}>
+          <View style={styles.chartWrap}>
+            <Svg width={width} height={height} viewBox={`0 0 ${width} ${height}`}>
+              <Defs>
+                <LinearGradient id="balanceFill" x1="0" y1="0" x2="0" y2="1">
+                  <Stop offset="0%" stopColor={colors.chartExpense} stopOpacity="0.45" />
+                  <Stop offset="100%" stopColor={colors.chartExpense} stopOpacity="0.03" />
+                </LinearGradient>
+              </Defs>
 
-          {areaPath ? <Path d={areaPath} fill="url(#balanceFill)" /> : null}
-          {linePath ? <Path d={linePath} stroke={colors.chartExpense} strokeWidth={2.2} fill="none" /> : null}
+              {areaPath ? <Path d={areaPath} fill="url(#balanceFill)" /> : null}
+              {linePath ? <Path d={linePath} stroke={colors.chartExpense} strokeWidth={2.2} fill="none" /> : null}
 
-          {endPoint ? (
-            <Path
-              d={`M ${endPoint.x - 4} ${endPoint.y} a 4 4 0 1 0 8 0 a 4 4 0 1 0 -8 0`}
-              fill={colors.chartExpense}
-            />
-          ) : null}
-        </Svg>
-      </View>
+              {endPoint ? (
+                <Path
+                  d={`M ${endPoint.x - 4} ${endPoint.y} a 4 4 0 1 0 8 0 a 4 4 0 1 0 -8 0`}
+                  fill={colors.chartExpense}
+                />
+              ) : null}
+            </Svg>
+          </View>
 
-      <View style={styles.labelsRow}>
-        <Text style={styles.label}>{firstLabel}</Text>
-        <Text style={styles.label}>{middleLabel}</Text>
-        <Text style={styles.label}>{lastLabel}</Text>
-      </View>
+          <View style={styles.labelsTrack}>
+            {points.map((point, index) => {
+              const x = chartPoints[index]?.x ?? 0;
+              const left = Math.max(0, Math.min(width - 26, x - 13));
+              return (
+                <Text key={`${point.label}-${index}`} style={[styles.labelTick, { left }]}>
+                  {point.label}
+                </Text>
+              );
+            })}
+          </View>
+        </View>
+      </ScrollView>
     </View>
   );
 };
@@ -117,14 +123,20 @@ const createStyles = (colors: any) =>
       borderRadius: radii.md,
       overflow: 'hidden',
     },
-    labelsRow: {
-      flexDirection: 'row',
-      justifyContent: 'space-between',
+    scrollContent: {
+      paddingRight: spacing.xs,
+    },
+    labelsTrack: {
+      position: 'relative',
+      height: 16,
       marginTop: -6,
     },
-    label: {
+    labelTick: {
+      position: 'absolute',
       color: colors.textMuted,
       fontSize: 11,
       fontWeight: '500',
+      width: 26,
+      textAlign: 'center',
     },
   });

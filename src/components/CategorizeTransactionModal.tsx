@@ -1,5 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { CategoryOption, Transaction } from '../types/finance';
 import { radii, spacing } from '../theme/tokens';
@@ -41,13 +41,6 @@ export const CategorizeTransactionModal = ({
     setError(null);
   }, [visible, transaction]);
 
-  const helperText = useMemo(() => {
-    if (!transaction) {
-      return '';
-    }
-    return `Regra por nome: todas as movimentacoes de \"${transaction.title}\" usarao a categoria escolhida.`;
-  }, [transaction]);
-
   const handleSave = async () => {
     if (creatingCategory) {
       const label = newCategoryLabel.trim();
@@ -69,18 +62,14 @@ export const CategorizeTransactionModal = ({
       <View style={styles.backdrop}>
         <View style={styles.container}>
           <View style={styles.header}>
-            <Text style={styles.title}>Categorizar movimentacao</Text>
+            <View style={styles.headerTextWrap}>
+              <Text style={styles.title}>Categorizar</Text>
+              {transaction ? <Text style={styles.subtitle}>{transaction.title}</Text> : null}
+            </View>
             <Pressable onPress={onClose}>
               <Ionicons name="close" size={24} color={colors.textPrimary} />
             </Pressable>
           </View>
-
-          {transaction ? (
-            <View style={styles.infoCard}>
-              <Text style={styles.infoTitle}>{transaction.title}</Text>
-              <Text style={styles.infoSubtitle}>{helperText}</Text>
-            </View>
-          ) : null}
 
           <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
             <Text style={styles.sectionTitle}>Categorias</Text>
@@ -151,30 +140,22 @@ const createStyles = (colors: any) =>
     header: {
       flexDirection: 'row',
       justifyContent: 'space-between',
-      alignItems: 'center',
+      alignItems: 'flex-start',
+      gap: spacing.sm,
+    },
+    headerTextWrap: {
+      flex: 1,
     },
     title: {
       color: colors.textPrimary,
       fontSize: 22,
       fontWeight: '800',
     },
-    infoCard: {
-      borderRadius: radii.md,
-      backgroundColor: colors.surface,
-      borderWidth: 1,
-      borderColor: colors.border,
-      padding: spacing.md,
-      gap: spacing.xs,
-    },
-    infoTitle: {
-      color: colors.textPrimary,
-      fontSize: 16,
-      fontWeight: '700',
-    },
-    infoSubtitle: {
+    subtitle: {
+      marginTop: 2,
       color: colors.textSecondary,
-      fontSize: 12,
-      lineHeight: 18,
+      fontSize: 13,
+      lineHeight: 19,
     },
     content: {
       maxHeight: 360,

@@ -69,5 +69,7 @@ export interface PluggyImportResult extends StatementImportResult {
   itemId: string;
   accountCount: number;
   pulledTransactions: number;
+  totalAvailableBalance: number | null;
+  totalCurrentBalance: number | null;
   syncedAt: string;
 }
