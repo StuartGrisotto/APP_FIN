@@ -37,6 +37,16 @@ export interface DashboardData {
   transactions: Transaction[];
   periodTransactions: Transaction[];
   chart: ChartPoint[];
+  pluggyBalanceFieldCandidates?: PluggyBalanceFieldCandidate[];
+}
+
+export interface PluggyBalanceFieldCandidate {
+  accountId: string;
+  accountName: string;
+  accountType: string;
+  field: string;
+  value: number | null;
+  source: 'account' | 'realtime';
 }
 
 export interface LoginPayload {
@@ -58,18 +68,16 @@ export interface CategoryOption {
   isCustom: boolean;
 }
 
-export interface StatementImportResult {
-  importedCount: number;
-  duplicateCount: number;
-  invalidCount: number;
-  totalRead: number;
-}
-
-export interface PluggyImportResult extends StatementImportResult {
+export interface PluggyImportResult {
   itemId: string;
   accountCount: number;
   pulledTransactions: number;
   totalAvailableBalance: number | null;
   totalCurrentBalance: number | null;
+  balanceFieldCandidates: PluggyBalanceFieldCandidate[];
+  importedCount: number;
+  duplicateCount: number;
+  invalidCount: number;
+  totalRead: number;
   syncedAt: string;
 }

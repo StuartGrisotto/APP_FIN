@@ -26,13 +26,6 @@ const menuItems = [
     enabled: true,
   },
   {
-    id: 'statement',
-    title: 'Importar extrato',
-    subtitle: 'CSV do banco com historico',
-    icon: 'document-attach-outline' as const,
-    enabled: true,
-  },
-  {
     id: 'security',
     title: 'Seguranca',
     subtitle: 'Senha e autenticacao',
@@ -150,12 +143,12 @@ export const SettingsScreen = ({ onBackToHome }: SettingsScreenProps) => {
 
           <View style={styles.statementInfo}>
             <Text style={styles.statementTitle}>Open Finance (Pluggy)</Text>
-            <Text style={styles.statementSubtitle}>Conecte e importe transacoes bancarias</Text>
+            <Text style={styles.statementSubtitle}>Conecte e sincronize transacoes bancarias</Text>
           </View>
         </View>
 
         <Text style={styles.statementDescription}>
-          Abra o Pluggy Connect dentro do app, conecte via MeuPluggy e a importacao das transacoes reais sera feita automaticamente.
+          Abra o Pluggy Connect dentro do app, conecte via MeuPluggy e sincronize as transacoes reais automaticamente.
         </Text>
 
         <Text style={styles.metaLine}>Backend: {backendBaseUrl}</Text>

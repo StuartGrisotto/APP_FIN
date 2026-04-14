@@ -15,6 +15,7 @@ import { useFinance } from '../context/FinanceContext';
 import { useAppTheme } from '../context/ThemeContext';
 import { radii, spacing } from '../theme/tokens';
 import { Transaction } from '../types/finance';
+import { formatCurrency } from '../utils/formatters';
 
 interface DashboardScreenProps {
   onOpenSettings: () => void;
@@ -72,11 +73,13 @@ export const DashboardScreen = ({ onOpenSettings }: DashboardScreenProps) => {
       <Screen>
         <EmptyState
           title="Nao foi possivel carregar"
-          subtitle="Tente abrir novamente ou importar o extrato em Ajustes."
+          subtitle="Tente abrir novamente ou sincronizar o banco em Ajustes."
         />
       </Screen>
     );
   }
+
+  const pluggyFields = dashboard.pluggyBalanceFieldCandidates ?? [];
 
   return (
     <Screen>
@@ -133,6 +136,29 @@ export const DashboardScreen = ({ onOpenSettings }: DashboardScreenProps) => {
               Nenhuma transacao para essa categoria no periodo selecionado.
             </Text>
           </View>
+        )}
+      </View>
+
+      <View style={styles.balanceFieldsCard}>
+        <Text style={styles.sectionTitle}>Campos de saldo (MeuPluggy)</Text>
+        {pluggyFields.length > 0 ? (
+          pluggyFields.map((item, index) => (
+            <View key={`${item.accountId}-${item.source}-${item.field}-${index}`} style={styles.balanceFieldRow}>
+              <Text style={styles.balanceFieldTitle}>
+                {item.accountName} ({item.accountType || 'N/A'})
+              </Text>
+              <Text style={styles.balanceFieldMeta}>
+                {item.source}.{item.field}
+              </Text>
+              <Text style={styles.balanceFieldValue}>
+                {item.value !== null ? formatCurrency(item.value) : 'sem valor'}
+              </Text>
+            </View>
+          ))
+        ) : (
+          <Text style={styles.emptyFilteredText}>
+            Nenhum campo de saldo recebido ainda. Sincronize pelo Pluggy para listar os valores.
+          </Text>
         )}
       </View>
 
@@ -208,6 +234,38 @@ const createStyles = (colors: any) =>
       borderColor: colors.border,
       backgroundColor: colors.surface,
       paddingHorizontal: spacing.md,
+    },
+    balanceFieldsCard: {
+      borderRadius: radii.lg,
+      borderWidth: 1,
+      borderColor: colors.border,
+      backgroundColor: colors.surface,
+      paddingHorizontal: spacing.md,
+      paddingVertical: spacing.md,
+      gap: spacing.sm,
+    },
+    balanceFieldRow: {
+      borderRadius: radii.md,
+      borderWidth: 1,
+      borderColor: colors.border,
+      backgroundColor: colors.backgroundElevated,
+      paddingHorizontal: spacing.sm,
+      paddingVertical: spacing.sm,
+      gap: 2,
+    },
+    balanceFieldTitle: {
+      color: colors.textPrimary,
+      fontSize: 13,
+      fontWeight: '700',
+    },
+    balanceFieldMeta: {
+      color: colors.textMuted,
+      fontSize: 11,
+    },
+    balanceFieldValue: {
+      color: colors.primary,
+      fontSize: 14,
+      fontWeight: '700',
     },
     emptyFilteredWrap: {
       paddingVertical: spacing.lg,

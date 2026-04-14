@@ -15,7 +15,6 @@ import {
   DashboardData,
   PeriodFilter,
   PluggyImportResult,
-  StatementImportResult,
 } from '../types/finance';
 
 interface FinanceContextValue {
@@ -25,22 +24,20 @@ interface FinanceContextValue {
   categoryOptions: CategoryOption[];
   categoryLabelMap: Record<string, string>;
   loadingDashboard: boolean;
-  importingStatement: boolean;
   importingPluggy: boolean;
   addingTransaction: boolean;
-  statementImportFeedback: string | null;
+  resettingAppData: boolean;
   pluggyImportFeedback: string | null;
   setPeriod: (period: PeriodFilter) => void;
   refreshDashboard: () => Promise<void>;
   addTransaction: (payload: CreateTransactionPayload) => Promise<void>;
-  importStatementCsv: (csvContent: string) => Promise<StatementImportResult>;
   importPluggyItem: (itemId: string) => Promise<PluggyImportResult>;
+  resetAppData: () => Promise<void>;
   updateTransactionCategory: (
     transactionId: string,
     categoryId: string,
     categoryLabel?: string,
   ) => Promise<void>;
-  clearStatementFeedback: () => void;
   clearPluggyFeedback: () => void;
 }
 
@@ -53,10 +50,9 @@ export const FinanceProvider = ({ children }: PropsWithChildren) => {
   const [categoryOptions, setCategoryOptions] = useState<CategoryOption[]>([]);
   const [categoryLabelMap, setCategoryLabelMap] = useState<Record<string, string>>({});
   const [loadingDashboard, setLoadingDashboard] = useState(true);
-  const [importingStatement, setImportingStatement] = useState(false);
   const [importingPluggy, setImportingPluggy] = useState(false);
   const [addingTransaction, setAddingTransaction] = useState(false);
-  const [statementImportFeedback, setStatementImportFeedback] = useState<string | null>(null);
+  const [resettingAppData, setResettingAppData] = useState(false);
   const [pluggyImportFeedback, setPluggyImportFeedback] = useState<string | null>(null);
   const firstLoadRef = useRef(true);
 
@@ -117,33 +113,6 @@ export const FinanceProvider = ({ children }: PropsWithChildren) => {
     setAddingTransaction(false);
   };
 
-  const importStatementCsv = async (csvContent: string): Promise<StatementImportResult> => {
-    setImportingStatement(true);
-    setStatementImportFeedback(null);
-
-    try {
-      const result = await financeService.importStatementCsv(csvContent);
-      await refreshDashboard();
-
-      const summary = `Extrato processado: ${result.importedCount} novas, ${result.duplicateCount} duplicadas, ${result.invalidCount} invalidas.`;
-      setStatementImportFeedback(summary);
-      return result;
-    } catch (error) {
-      const message =
-        error instanceof Error
-          ? error.message
-          : 'Nao foi possivel importar o extrato.';
-      setStatementImportFeedback(message);
-      throw error;
-    } finally {
-      setImportingStatement(false);
-    }
-  };
-
-  const clearStatementFeedback = () => {
-    setStatementImportFeedback(null);
-  };
-
   const importPluggyItem = async (itemId: string): Promise<PluggyImportResult> => {
     setImportingPluggy(true);
     setPluggyImportFeedback(null);
@@ -165,6 +134,21 @@ export const FinanceProvider = ({ children }: PropsWithChildren) => {
       throw error;
     } finally {
       setImportingPluggy(false);
+    }
+  };
+
+  const resetAppData = async () => {
+    setResettingAppData(true);
+    try {
+      await financeService.resetFactoryData();
+      setDashboard(null);
+      setLastPluggySyncAt(null);
+      setCategoryOptions([]);
+      setCategoryLabelMap({});
+      setPluggyImportFeedback(null);
+      setPeriodState('month');
+    } finally {
+      setResettingAppData(false);
     }
   };
 
@@ -193,18 +177,16 @@ export const FinanceProvider = ({ children }: PropsWithChildren) => {
       categoryOptions,
       categoryLabelMap,
       loadingDashboard,
-      importingStatement,
       importingPluggy,
       addingTransaction,
-      statementImportFeedback,
+      resettingAppData,
       pluggyImportFeedback,
       setPeriod,
       refreshDashboard,
       addTransaction,
-      importStatementCsv,
       importPluggyItem,
+      resetAppData,
       updateTransactionCategory,
-      clearStatementFeedback,
       clearPluggyFeedback,
     }),
     [
@@ -215,10 +197,9 @@ export const FinanceProvider = ({ children }: PropsWithChildren) => {
       lastPluggySyncAt,
       loadingDashboard,
       importingPluggy,
-      importingStatement,
       period,
       pluggyImportFeedback,
-      statementImportFeedback,
+      resettingAppData,
     ],
   );
 

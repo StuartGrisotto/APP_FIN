@@ -12,13 +12,12 @@ import {
   CreateTransactionPayload,
   DashboardData,
   PeriodFilter,
+  PluggyBalanceFieldCandidate,
   PluggyImportResult,
-  StatementImportResult,
   Transaction,
   TransactionCategory,
 } from '../types/finance';
 import { pluggyService } from './pluggyService';
-import { mergeParsedTransactions, parseNubankCsv } from './statementImport';
 
 const wait = (ms: number): Promise<void> =>
   new Promise((resolve) => setTimeout(resolve, ms));
@@ -27,13 +26,18 @@ const STORAGE_KEY = 'app_fin_transactions_realonly_v1';
 const STORAGE_FILE = `${FileSystem.documentDirectory ?? ''}app_fin_transactions_realonly_v1.json`;
 const PLUGGY_LAST_SYNC_KEY = 'app_fin_pluggy_last_sync_at_v1';
 const PLUGGY_AVAILABLE_BALANCE_KEY = 'app_fin_pluggy_available_balance_v1';
+const PLUGGY_BALANCE_FIELDS_KEY = 'app_fin_pluggy_balance_fields_v1';
 const CATEGORY_RULES_KEY = 'app_fin_category_rules_v1';
 const CATEGORY_LABELS_KEY = 'app_fin_custom_category_labels_v1';
+const APP_KEY_PREFIX = 'app_fin_';
 
 let transactionsDb: Transaction[] = [];
 let categoryRulesDb: Record<string, string> = {};
 let customCategoryLabelsDb: Record<string, string> = {};
 let hydrated = false;
+
+const stripLegacyStatementTransactions = (items: Transaction[]): Transaction[] =>
+  items.filter((item) => !item.id.startsWith('csv_'));
 
 const readFromFileBackup = async (): Promise<Transaction[] | null> => {
   if (!FileSystem.documentDirectory) {
@@ -95,10 +99,17 @@ const hydrateTransactions = async () => {
   } catch {
     const fileBackup = await readFromFileBackup();
     if (fileBackup) {
-      transactionsDb = fileBackup;
+      transactionsDb = stripLegacyStatementTransactions(fileBackup);
     } else {
       transactionsDb = [];
     }
+  }
+
+  const sanitizedTransactions = stripLegacyStatementTransactions(transactionsDb);
+  const removedLegacyStatementRows = sanitizedTransactions.length !== transactionsDb.length;
+  transactionsDb = sanitizedTransactions;
+  if (removedLegacyStatementRows) {
+    await persistTransactions();
   }
 
   hydrated = true;
@@ -219,7 +230,35 @@ const persistCustomCategoryLabels = async () => {
   }
 };
 
+const deleteTransactionsBackupFile = async () => {
+  if (!FileSystem.documentDirectory) {
+    return;
+  }
+
+  try {
+    await FileSystem.deleteAsync(STORAGE_FILE, { idempotent: true });
+  } catch {
+    // Em alguns ambientes o modulo legacy pode nao estar disponivel.
+    // O reset deve continuar limpando ao menos o AsyncStorage.
+  }
+};
+
 export const financeService = {
+  async resetFactoryData(): Promise<void> {
+    transactionsDb = [];
+    categoryRulesDb = {};
+    customCategoryLabelsDb = {};
+
+    const keys = await AsyncStorage.getAllKeys();
+    const appKeys = keys.filter((key) => key.startsWith(APP_KEY_PREFIX));
+    if (appKeys.length > 0) {
+      await Promise.all(appKeys.map((key) => AsyncStorage.removeItem(key)));
+    }
+
+    await deleteTransactionsBackupFile();
+    hydrated = false;
+  },
+
   async getCategoryOptions(): Promise<CategoryOption[]> {
     await hydrateTransactions();
     const options = buildCategoryOptions(customCategoryLabelsDb);
@@ -333,11 +372,23 @@ export const financeService = {
       if (rawAvailableBalance !== null) {
         const parsedAvailableBalance = Number(rawAvailableBalance);
         if (Number.isFinite(parsedAvailableBalance)) {
-          dashboard.summary.balance += parsedAvailableBalance;
+          dashboard.summary.balance = parsedAvailableBalance;
         }
       }
     } catch {
       // Falha ao ler saldo do Pluggy nao deve quebrar dashboard
+    }
+
+    try {
+      const rawCandidates = await AsyncStorage.getItem(PLUGGY_BALANCE_FIELDS_KEY);
+      if (rawCandidates) {
+        const parsed = JSON.parse(rawCandidates) as PluggyBalanceFieldCandidate[];
+        if (Array.isArray(parsed)) {
+          dashboard.pluggyBalanceFieldCandidates = parsed;
+        }
+      }
+    } catch {
+      dashboard.pluggyBalanceFieldCandidates = [];
     }
 
     return dashboard;
@@ -361,30 +412,6 @@ export const financeService = {
 
   async syncTransactions(): Promise<void> {
     await wait(500);
-  },
-
-  async importStatementCsv(csvContent: string): Promise<StatementImportResult> {
-    await hydrateTransactions();
-    await wait(250);
-
-    const { parsed, invalidCount, totalRead } = parseNubankCsv(csvContent);
-    const parsedWithRules = parsed.map((item) => ({
-      ...item,
-      transaction: {
-        ...item.transaction,
-        category: resolveCategoryByRule(item.transaction.title, item.transaction.category),
-      },
-    }));
-    const { nextTransactions, result } = mergeParsedTransactions(
-      transactionsDb,
-      parsedWithRules,
-      invalidCount,
-      totalRead,
-    );
-
-    transactionsDb = nextTransactions;
-    await persistTransactions();
-    return result;
   },
 
   async importPluggyItem(itemId: string): Promise<PluggyImportResult> {
@@ -461,15 +488,19 @@ export const financeService = {
       const balanceToPersist =
         payload.totalAvailableBalance !== null && Number.isFinite(payload.totalAvailableBalance)
           ? payload.totalAvailableBalance
-          : payload.totalCurrentBalance !== null && Number.isFinite(payload.totalCurrentBalance)
-            ? payload.totalCurrentBalance
-            : null;
+          : null;
       if (balanceToPersist !== null) {
         await AsyncStorage.setItem(
           PLUGGY_AVAILABLE_BALANCE_KEY,
           String(balanceToPersist),
         );
+      } else {
+        await AsyncStorage.removeItem(PLUGGY_AVAILABLE_BALANCE_KEY);
       }
+      await AsyncStorage.setItem(
+        PLUGGY_BALANCE_FIELDS_KEY,
+        JSON.stringify(payload.balanceFieldCandidates ?? []),
+      );
     } catch {
       // Falha de persistencia da data nao deve quebrar importacao
     }
@@ -480,6 +511,7 @@ export const financeService = {
       pulledTransactions: payload.transactionCount,
       totalAvailableBalance: payload.totalAvailableBalance,
       totalCurrentBalance: payload.totalCurrentBalance,
+      balanceFieldCandidates: payload.balanceFieldCandidates ?? [],
       importedCount: accepted.length,
       duplicateCount,
       invalidCount,

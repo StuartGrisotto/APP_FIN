@@ -164,7 +164,17 @@ export interface PullItemTransactionsResult {
   transactionCount: number;
   totalAvailableBalance: number | null;
   totalCurrentBalance: number | null;
+  balanceFieldCandidates: BalanceFieldCandidate[];
   transactions: PluggyRawTransaction[];
+}
+
+export interface BalanceFieldCandidate {
+  accountId: string;
+  accountName: string;
+  accountType: string;
+  field: string;
+  value: number | null;
+  source: 'account' | 'realtime';
 }
 
 export interface WaitItemResult {
@@ -180,50 +190,96 @@ const normalizeText = (value: string) =>
     .toLowerCase()
     .trim();
 
-const readAccountBalance = (account: Record<string, unknown>) => {
-  const balanceObject =
-    account.balance && typeof account.balance === 'object'
-      ? (account.balance as Record<string, unknown>)
+const isBankAccount = (account: Record<string, unknown>): boolean => {
+  const rawType = String(account.type ?? account.subtype ?? '').trim().toUpperCase();
+  return rawType === 'BANK';
+};
+
+const toFiniteNumber = (value: unknown): number | null => {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
+};
+
+const BALANCE_FIELD_NAMES = [
+  'balance',
+  'availableBalance',
+  'currentBalance',
+  'closingBalance',
+  'blockedBalance',
+  'automaticallyInvestedBalance',
+  'available',
+  'current',
+  'amount',
+  'value',
+  'balanceAvailable',
+  'balance_available',
+  'current_balance',
+  'closing_balance',
+];
+
+const readBalanceFieldValue = (payload: Record<string, unknown>, field: string): number | null => {
+  const direct = toFiniteNumber(payload[field]);
+  if (direct !== null) {
+    return direct;
+  }
+
+  const nestedBalance =
+    payload.balance && typeof payload.balance === 'object'
+      ? (payload.balance as Record<string, unknown>)
       : null;
-  const availableCandidates = [
-    account.availableBalance,
-    account.available,
-    account.balanceAvailable,
-    account.balance_available,
-    balanceObject?.available,
-    balanceObject?.availableBalance,
-    balanceObject?.amountAvailable,
-  ];
-  const currentCandidates = [
-    account.balance,
-    account.currentBalance,
-    account.current,
-    account.current_balance,
-    balanceObject?.current,
-    balanceObject?.currentBalance,
-    balanceObject?.amount,
-    balanceObject?.value,
-  ];
-
-  let available: number | null = null;
-  for (const candidate of availableCandidates) {
-    const parsed = Number(candidate);
-    if (Number.isFinite(parsed)) {
-      available = parsed;
-      break;
+  if (nestedBalance) {
+    const nested = toFiniteNumber(nestedBalance[field]);
+    if (nested !== null) {
+      return nested;
     }
   }
 
-  let current: number | null = null;
-  for (const candidate of currentCandidates) {
-    const parsed = Number(candidate);
-    if (Number.isFinite(parsed)) {
-      current = parsed;
-      break;
+  if (field === 'balance') {
+    const rawBalance = payload.balance;
+    const numericBalance = toFiniteNumber(rawBalance);
+    if (numericBalance !== null) {
+      return numericBalance;
     }
   }
 
-  return { available, current };
+  return null;
+};
+
+const buildBalanceFieldCandidates = (
+  payload: Record<string, unknown>,
+  source: 'account' | 'realtime',
+  accountId: string,
+  accountName: string,
+  accountType: string,
+): BalanceFieldCandidate[] =>
+  BALANCE_FIELD_NAMES.map((field) => ({
+    accountId,
+    accountName,
+    accountType,
+    field,
+    value: readBalanceFieldValue(payload, field),
+    source,
+  }));
+
+const readAccountId = (account: Record<string, unknown>): string => {
+  const raw = account.id;
+  if (typeof raw === 'string' || typeof raw === 'number') {
+    return String(raw).trim();
+  }
+  return '';
+};
+
+const readRealTimeBalance = async (accountId: string): Promise<number | null> => {
+  try {
+    const payload = await requestPluggy(`/accounts/${encodeURIComponent(accountId)}/balance`, {
+      method: 'GET',
+    });
+    return toFiniteNumber(payload.balance);
+  } catch {
+    // Endpoint disponivel apenas para Open Finance.
+    // Se falhar, usamos o balance do recurso account como fallback.
+    return null;
+  }
 };
 
 export const createConnectToken = async (clientUserId: string): Promise<string> => {
@@ -300,28 +356,69 @@ export const pullItemTransactions = async (itemId: string): Promise<PullItemTran
 
   const transactions: PluggyRawTransaction[] = [];
   const seenTransactionIds = new Set<string>();
-  let totalAvailableBalance = 0;
-  let totalCurrentBalance = 0;
-  let availableBalanceCount = 0;
-  let currentBalanceCount = 0;
+  const accountsBANK = accounts.filter((account) => isBankAccount(account));
+  const accountFieldCandidates = accounts.flatMap((account) => {
+    const accountId = readAccountId(account);
+    const accountName = String(account.name ?? account.number ?? account.id ?? 'Conta');
+    const accountType = String(account.type ?? account.subtype ?? '');
+    return buildBalanceFieldCandidates(account, 'account', accountId, accountName, accountType);
+  });
+  const bankBalances = await Promise.all(
+    accountsBANK.map(async (account) => {
+      const accountId = readAccountId(account);
+      if (!accountId) {
+        return toFiniteNumber(account.balance);
+      }
+
+      const realTimeBalance = await readRealTimeBalance(accountId);
+      if (realTimeBalance !== null) {
+        return realTimeBalance;
+      }
+
+      return toFiniteNumber(account.balance);
+    }),
+  );
+  const validBankBalances = bankBalances.filter((value): value is number => value !== null);
+  const saldoDisponivel = validBankBalances.reduce((sum, balance) => sum + balance, 0);
+  const realtimeFieldCandidates: BalanceFieldCandidate[] = [];
+
+  await Promise.all(
+    accountsBANK.map(async (account) => {
+      const accountId = readAccountId(account);
+      if (!accountId) {
+        return;
+      }
+      try {
+        const payload = await requestPluggy(`/accounts/${encodeURIComponent(accountId)}/balance`, {
+          method: 'GET',
+        });
+        realtimeFieldCandidates.push(
+          ...buildBalanceFieldCandidates(
+            payload,
+            'realtime',
+            accountId,
+            String(account.name ?? account.number ?? account.id ?? 'Conta'),
+            String(account.type ?? account.subtype ?? ''),
+          ),
+        );
+      } catch {
+        // sem erro fatal para lista de debug
+      }
+    }),
+  );
+  const dedupe = new Set<string>();
+  const balanceFieldCandidates = [...accountFieldCandidates, ...realtimeFieldCandidates].filter((item) => {
+    const key = `${item.accountId}|${item.source}|${item.field}`;
+    if (dedupe.has(key)) {
+      return false;
+    }
+    dedupe.add(key);
+    return true;
+  });
 
   await Promise.all(
     accounts.map(async (account) => {
-      const balances = readAccountBalance(account);
-      if (balances.available !== null) {
-        totalAvailableBalance += balances.available;
-        availableBalanceCount += 1;
-      }
-      if (balances.current !== null) {
-        totalCurrentBalance += balances.current;
-        currentBalanceCount += 1;
-      }
-
-      const accountIdRaw = account.id;
-      const accountId =
-        typeof accountIdRaw === 'string' || typeof accountIdRaw === 'number'
-          ? String(accountIdRaw).trim()
-          : '';
+      const accountId = readAccountId(account);
       if (!accountId) {
         return;
       }
@@ -359,8 +456,9 @@ export const pullItemTransactions = async (itemId: string): Promise<PullItemTran
     itemId,
     accountCount: accounts.length,
     transactionCount: transactions.length,
-    totalAvailableBalance: availableBalanceCount > 0 ? totalAvailableBalance : null,
-    totalCurrentBalance: currentBalanceCount > 0 ? totalCurrentBalance : null,
+    totalAvailableBalance: validBankBalances.length > 0 ? saldoDisponivel : null,
+    totalCurrentBalance: null,
+    balanceFieldCandidates,
     transactions,
   };
 };

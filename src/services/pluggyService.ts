@@ -8,12 +8,22 @@ interface PluggyImportResponseTransaction {
   type?: string;
 }
 
+interface PluggyBalanceFieldCandidate {
+  accountId: string;
+  accountName: string;
+  accountType: string;
+  field: string;
+  value: number | null;
+  source: 'account' | 'realtime';
+}
+
 interface PluggyImportResponse {
   itemId: string;
   accountCount: number;
   transactionCount: number;
   totalAvailableBalance: number | null;
   totalCurrentBalance: number | null;
+  balanceFieldCandidates: PluggyBalanceFieldCandidate[];
   transactions: PluggyImportResponseTransaction[];
 }
 
