@@ -1,7 +1,7 @@
 ﻿import { ReactNode } from 'react';
 import { StyleSheet, Text, TextInput, View } from 'react-native';
-import { useAppTheme } from '../context/ThemeContext';
-import { radii, spacing } from '../theme/tokens';
+import { useAppTheme } from '../../context/ThemeContext';
+import { radii, spacing } from '../../theme/tokens';
 
 interface InputFieldProps {
   label: string;

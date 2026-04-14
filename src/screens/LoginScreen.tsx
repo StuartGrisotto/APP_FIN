@@ -1,8 +1,8 @@
 ﻿import { Ionicons } from '@expo/vector-icons';
 import { useCallback, useEffect, useRef } from 'react';
 import { Image, StyleSheet, Text, View } from 'react-native';
-import { PrimaryButton } from '../components/PrimaryButton';
-import { Screen } from '../components/Screen';
+import { PrimaryButton } from '../components/ui/PrimaryButton';
+import { Screen } from '../components/ui/Screen';
 import { useAuth } from '../context/AuthContext';
 import { useAppTheme } from '../context/ThemeContext';
 import { radii, spacing } from '../theme/tokens';

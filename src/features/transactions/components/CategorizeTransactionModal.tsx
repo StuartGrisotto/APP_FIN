@@ -1,11 +1,11 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useEffect, useState } from 'react';
 import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
-import { CategoryOption, Transaction } from '../types/finance';
-import { radii, spacing } from '../theme/tokens';
-import { InputField } from './InputField';
-import { PrimaryButton } from './PrimaryButton';
-import { useAppTheme } from '../context/ThemeContext';
+import { useAppTheme } from '../../../context/ThemeContext';
+import { radii, spacing } from '../../../theme/tokens';
+import { CategoryOption, Transaction } from '../../../types/finance';
+import { InputField } from '../../../components/ui/InputField';
+import { PrimaryButton } from '../../../components/ui/PrimaryButton';
 
 interface CategorizeTransactionModalProps {
   visible: boolean;

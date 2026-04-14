@@ -1,7 +1,7 @@
 ﻿import { Pressable, StyleSheet, Text, View } from 'react-native';
-import { useAppTheme } from '../context/ThemeContext';
-import { PeriodFilter } from '../types/finance';
-import { radii, spacing } from '../theme/tokens';
+import { useAppTheme } from '../../../context/ThemeContext';
+import { PeriodFilter } from '../../../types/finance';
+import { radii, spacing } from '../../../theme/tokens';
 
 const options: { label: string; value: PeriodFilter }[] = [
   { label: 'Hoje', value: 'today' },

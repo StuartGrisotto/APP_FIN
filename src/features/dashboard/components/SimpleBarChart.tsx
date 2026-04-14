@@ -1,8 +1,8 @@
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import Svg, { Defs, LinearGradient, Path, Stop } from 'react-native-svg';
-import { useAppTheme } from '../context/ThemeContext';
-import { ChartPoint } from '../types/finance';
-import { radii, spacing } from '../theme/tokens';
+import { useAppTheme } from '../../../context/ThemeContext';
+import { ChartPoint } from '../../../types/finance';
+import { radii, spacing } from '../../../theme/tokens';
 
 interface SimpleBarChartProps {
   points: ChartPoint[];

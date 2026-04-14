@@ -1,10 +1,10 @@
 ﻿import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
-import { useAppTheme } from '../context/ThemeContext';
-import { Summary } from '../types/finance';
-import { radii, spacing } from '../theme/tokens';
-import { formatCurrency } from '../utils/formatters';
+import { useAppTheme } from '../../../context/ThemeContext';
+import { Summary } from '../../../types/finance';
+import { radii, spacing } from '../../../theme/tokens';
+import { formatCurrency } from '../../../utils/formatters';
 
 interface BalanceCardProps {
   summary: Summary;

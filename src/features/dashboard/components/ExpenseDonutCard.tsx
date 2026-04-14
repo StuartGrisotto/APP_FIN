@@ -1,10 +1,10 @@
 ﻿import { Pressable, StyleSheet, Text, View } from 'react-native';
 import Svg, { Circle, G, Path } from 'react-native-svg';
-import { getCategoryLabel } from '../constants/categories';
-import { useAppTheme } from '../context/ThemeContext';
-import { Transaction } from '../types/finance';
-import { radii, spacing } from '../theme/tokens';
-import { formatCurrency } from '../utils/formatters';
+import { getCategoryLabel } from '../../../constants/categories';
+import { useAppTheme } from '../../../context/ThemeContext';
+import { Transaction } from '../../../types/finance';
+import { radii, spacing } from '../../../theme/tokens';
+import { formatCurrency } from '../../../utils/formatters';
 
 interface ExpenseDonutCardProps {
   transactions: Transaction[];

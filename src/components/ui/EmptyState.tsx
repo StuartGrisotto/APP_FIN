@@ -1,6 +1,6 @@
 ﻿import { StyleSheet, Text, View } from 'react-native';
-import { useAppTheme } from '../context/ThemeContext';
-import { radii, spacing } from '../theme/tokens';
+import { useAppTheme } from '../../context/ThemeContext';
+import { radii, spacing } from '../../theme/tokens';
 
 interface EmptyStateProps {
   title: string;

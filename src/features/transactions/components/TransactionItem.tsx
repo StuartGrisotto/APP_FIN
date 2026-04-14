@@ -1,10 +1,10 @@
 ﻿import { Ionicons } from '@expo/vector-icons';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
-import { getCategoryIcon, getCategoryLabel } from '../constants/categories';
-import { useAppTheme } from '../context/ThemeContext';
-import { Transaction } from '../types/finance';
-import { radii, spacing } from '../theme/tokens';
-import { formatCurrency, formatDate, transactionTypeLabel } from '../utils/formatters';
+import { getCategoryIcon, getCategoryLabel } from '../../../constants/categories';
+import { useAppTheme } from '../../../context/ThemeContext';
+import { Transaction } from '../../../types/finance';
+import { radii, spacing } from '../../../theme/tokens';
+import { formatCurrency, formatDate, transactionTypeLabel } from '../../../utils/formatters';
 
 interface TransactionItemProps {
   item: Transaction;

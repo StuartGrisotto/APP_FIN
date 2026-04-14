@@ -1,11 +1,11 @@
 ﻿import { useEffect, useMemo, useState } from 'react';
 import { FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
-import { CategorizeTransactionModal } from '../components/CategorizeTransactionModal';
-import { EmptyState } from '../components/EmptyState';
-import { Screen } from '../components/Screen';
-import { TransactionItem } from '../components/TransactionItem';
+import { EmptyState } from '../components/ui/EmptyState';
+import { Screen } from '../components/ui/Screen';
 import { useFinance } from '../context/FinanceContext';
 import { useAppTheme } from '../context/ThemeContext';
+import { CategorizeTransactionModal } from '../features/transactions/components/CategorizeTransactionModal';
+import { TransactionItem } from '../features/transactions/components/TransactionItem';
 import { radii, spacing } from '../theme/tokens';
 import { Transaction } from '../types/finance';
 
